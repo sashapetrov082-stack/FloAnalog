@@ -27,12 +27,14 @@ export function Calendar({
   periods,
   prediction,
   today,
+  loggedDates,
   selected,
   onSelect,
 }: {
   periods: Period[];
   prediction: Prediction | null;
   today: IsoDate;
+  loggedDates: Set<IsoDate>;
   selected: IsoDate | null;
   onSelect: (date: IsoDate) => void;
 }) {
@@ -72,7 +74,8 @@ export function Calendar({
           const mark = marks.get(date);
           const isToday = date === today;
           const isSelected = date === selected;
-          const label = `${formatDayMonth(date)}${mark ? `, ${markLabel[mark]}` : ""}${isToday ? ", сегодня" : ""}`;
+          const logged = loggedDates.has(date);
+          const label = `${formatDayMonth(date)}${mark ? `, ${markLabel[mark]}` : ""}${logged ? ", есть записи" : ""}${isToday ? ", сегодня" : ""}`;
           return (
             <button
               key={date}
@@ -85,7 +88,17 @@ export function Calendar({
               } ${isSelected ? "ring-2 ring-foreground ring-offset-2 ring-offset-surface" : ""}`}
             >
               {Number(date.slice(8))}
-              {isToday && <span className="absolute bottom-1 h-1 w-1 rounded-full bg-current" aria-hidden />}
+              {isToday && (
+                <span className="absolute inset-0.5 rounded-full border-2 border-foreground/70" aria-hidden />
+              )}
+              {logged && (
+                <span
+                  className={`absolute bottom-1 h-1.5 w-1.5 rounded-full ${
+                    mark === "period" || mark === "ovulation" ? "bg-white" : "bg-accent"
+                  }`}
+                  aria-hidden
+                />
+              )}
             </button>
           );
         })}
@@ -103,6 +116,9 @@ export function Calendar({
         </li>
         <li className="flex items-center gap-1.5">
           <span className="h-3 w-3 rounded-full bg-fertile" /> Овуляция
+        </li>
+        <li className="flex items-center gap-1.5">
+          <span className="h-1.5 w-1.5 rounded-full bg-accent" /> Есть записи
         </li>
       </ul>
     </div>

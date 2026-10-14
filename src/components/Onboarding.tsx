@@ -22,9 +22,10 @@ export function Onboarding({ today, onDone }: { today: IsoDate; onDone: (data: G
 
   const finish = () =>
     onDone({
-      version: 1,
+      version: 2,
       settings: { cycleLength, periodLength },
       periods: lastPeriod ? [{ start: lastPeriod, end: null }] : [],
+      dayLogs: {},
     });
 
   return (

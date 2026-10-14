@@ -3,9 +3,10 @@ import { describe, expect, it } from "vitest";
 import { clearGuestData, loadGuestData, parseGuestData, saveGuestData, type GuestData } from "./store";
 
 const sample: GuestData = {
-  version: 1,
+  version: 2,
   settings: { cycleLength: 29, periodLength: 5 },
   periods: [{ start: "2026-10-01", end: null }],
+  dayLogs: { "2026-10-02": { flow: "medium", symptoms: ["cramps"], moods: ["calm"], note: "грелка помогла" } },
 };
 
 describe("гостевое хранилище", () => {
@@ -19,8 +20,19 @@ describe("гостевое хранилище", () => {
 
   it("битые данные не принимаются", () => {
     expect(parseGuestData(null)).toBeNull();
-    expect(parseGuestData({ version: 2 })).toBeNull();
+    expect(parseGuestData({ version: 3 })).toBeNull();
+    expect(parseGuestData({ ...sample, dayLogs: { "не дата": {} } })).toBeNull();
     expect(parseGuestData({ ...sample, periods: [{ start: "вчера" }] })).toBeNull();
     expect(parseGuestData({ ...sample, settings: { cycleLength: "28", periodLength: 5 } })).toBeNull();
+  });
+
+  it("данные версии 1 переводятся в версию 2 с пустым журналом", () => {
+    const v1 = { version: 1, settings: sample.settings, periods: sample.periods };
+    expect(parseGuestData(v1)).toEqual({ ...sample, dayLogs: {} });
+  });
+
+  it("неизвестные значения в журнале отбрасываются", () => {
+    const parsed = parseGuestData({ ...sample, dayLogs: { "2026-10-02": { flow: "lots", symptoms: ["cramps", 5] } } });
+    expect(parsed?.dayLogs["2026-10-02"]).toEqual({ flow: null, symptoms: ["cramps"], moods: [], note: "" });
   });
 });

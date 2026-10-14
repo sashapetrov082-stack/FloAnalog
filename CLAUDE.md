@@ -20,9 +20,10 @@ Next.js (App Router) + TypeScript + Tailwind · Supabase (Postgres, Auth, Realti
 
 ```
 src/app/                 страницы (App Router)
-src/components/          экраны: онбординг, главный экран, календарь
+src/components/          экраны: онбординг, вкладки «Сегодня» / «Календарь» / «Настройки», журнал дня
 src/lib/cycle/           прогноз, отметки месячных, разметка календаря — чистые функции, без React и без базы
 src/lib/guest/           гостевой режим: хранение в IndexedDB
+src/lib/journal.ts       журнал дня: список симптомов и настроений
 src/lib/supabase/        клиенты Supabase (браузер / сервер)
 supabase/migrations/     схема базы и правила доступа (RLS) — единственный источник правды
 supabase/tests/          проверки правил доступа

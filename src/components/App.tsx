@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import type { IsoDate } from "@/lib/cycle/dates";
 import { clearGuestData, loadGuestData, saveGuestData, type GuestData } from "@/lib/guest/store";
 import { todayLocal } from "@/lib/format";
-import { Dashboard } from "./Dashboard";
+import { Home } from "./Home";
 import { Onboarding } from "./Onboarding";
 
 type State =
@@ -54,7 +54,7 @@ export function App() {
   };
 
   return state.data ? (
-    <Dashboard data={state.data} today={state.today} onChange={save} onReset={reset} />
+    <Home data={state.data} today={state.today} onChange={save} onReset={reset} />
   ) : (
     <Onboarding today={state.today} onDone={save} />
   );

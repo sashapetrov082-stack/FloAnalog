@@ -3,6 +3,7 @@
 
 import type { Period } from "@/lib/cycle/predict";
 import { assertIsoDate } from "@/lib/cycle/dates";
+import type { DayLog, DayLogs, FlowLevel } from "@/lib/journal";
 
 export interface GuestSettings {
   cycleLength: number;
@@ -10,9 +11,10 @@ export interface GuestSettings {
 }
 
 export interface GuestData {
-  version: 1;
+  version: 2;
   settings: GuestSettings;
   periods: Period[];
+  dayLogs: DayLogs;
 }
 
 const DB_NAME = "floanalog";
@@ -43,12 +45,38 @@ async function withStore<T>(mode: IDBTransactionMode, fn: (store: IDBObjectStore
   }
 }
 
-/** Проверка формы данных: битые или чужие данные не должны ронять приложение. */
+const FLOW_LEVELS: FlowLevel[] = ["spotting", "light", "medium", "heavy"];
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((x): x is string => typeof x === "string") : [];
+}
+
+function parseDayLogs(raw: unknown): DayLogs {
+  if (!raw || typeof raw !== "object") return {};
+  const logs: DayLogs = {};
+  for (const [date, value] of Object.entries(raw as Record<string, unknown>)) {
+    assertIsoDate(date);
+    const log = (value ?? {}) as Partial<DayLog>;
+    logs[date] = {
+      flow: FLOW_LEVELS.includes(log.flow as FlowLevel) ? log.flow : null,
+      symptoms: stringList(log.symptoms),
+      moods: stringList(log.moods),
+      note: typeof log.note === "string" ? log.note : "",
+    };
+  }
+  return logs;
+}
+
+/**
+ * Проверка формы данных: битые или чужие данные не должны ронять приложение.
+ * Данные старой версии 1 (без журнала) переводятся в версию 2.
+ */
 export function parseGuestData(raw: unknown): GuestData | null {
   if (!raw || typeof raw !== "object") return null;
-  const data = raw as Partial<GuestData>;
-  if (data.version !== 1 || !data.settings || !Array.isArray(data.periods)) return null;
+  const data = raw as { version?: unknown; settings?: Partial<GuestSettings>; periods?: Period[]; dayLogs?: unknown };
+  if ((data.version !== 1 && data.version !== 2) || !data.settings || !Array.isArray(data.periods)) return null;
   const { cycleLength, periodLength } = data.settings;
+  if (typeof cycleLength !== "number" || typeof periodLength !== "number") return null;
   if (!Number.isInteger(cycleLength) || !Number.isInteger(periodLength)) return null;
   try {
     const periods = data.periods.map((p) => {
@@ -56,7 +84,7 @@ export function parseGuestData(raw: unknown): GuestData | null {
       if (p.end) assertIsoDate(p.end);
       return { start: p.start, end: p.end ?? null };
     });
-    return { version: 1, settings: { cycleLength, periodLength }, periods };
+    return { version: 2, settings: { cycleLength, periodLength }, periods, dayLogs: parseDayLogs(data.dayLogs) };
   } catch {
     return null;
   }

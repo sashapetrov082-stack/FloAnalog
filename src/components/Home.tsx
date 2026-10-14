@@ -1,0 +1,424 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { compareDates, diffDays, type IsoDate } from "@/lib/cycle/dates";
+import {
+  findPeriodAt,
+  markPeriodEnd,
+  markPeriodStart,
+  ongoingPeriod,
+  removePeriod,
+} from "@/lib/cycle/periods";
+import { predict, type Phase, type Prediction, type Warning } from "@/lib/cycle/predict";
+import type { GuestData } from "@/lib/guest/store";
+import { formatDayMonth, formatLong, formatRange, pluralDays } from "@/lib/format";
+import { setDayLog, summarizeLog, type DayLog } from "@/lib/journal";
+import { Calendar } from "./Calendar";
+import { DayLogEditor } from "./DayLogEditor";
+import { Button, Card, Disclaimer, Stepper } from "./ui";
+
+type Tab = "today" | "calendar" | "settings";
+
+const TABS: { id: Tab; label: string; icon: string }[] = [
+  { id: "today", label: "Сегодня", icon: "●" },
+  { id: "calendar", label: "Календарь", icon: "▦" },
+  { id: "settings", label: "Настройки", icon: "⚙" },
+];
+
+const phaseLabel: Record<Phase, string> = {
+  menstruation: "Месячные",
+  follicular: "Фолликулярная фаза",
+  fertile: "Фертильные дни",
+  ovulation: "Овуляция (прогноз)",
+  luteal: "Лютеиновая фаза",
+};
+
+function warningText(w: Warning): string {
+  switch (w.type) {
+    case "short_cycle":
+      return `Средняя длина цикла — ${pluralDays(w.averageLength)}, это короче обычного. Если так повторяется, стоит обсудить это с гинекологом.`;
+    case "long_cycle":
+      return `Средняя длина цикла — ${pluralDays(w.averageLength)}, это длиннее обычного. Если так повторяется, стоит обсудить это с гинекологом.`;
+    case "delay":
+      return `Месячные задерживаются на ${pluralDays(w.days)}. Так бывает из-за стресса, болезни, смены режима или беременности. Если задержка продолжается, сделайте тест и обратитесь к врачу.`;
+  }
+}
+
+function nextPeriodText(p: Prediction, today: IsoDate): string {
+  if (p.delayDays > 0) return `Задержка ${pluralDays(p.delayDays)}`;
+  const { earliest, latest } = p.nextPeriod;
+  const days = diffDays(today, earliest);
+  const when = days <= 0 ? "в ближайшие дни" : `через ${pluralDays(days)}`;
+  return `${formatRange(earliest, latest)} · ${when}`;
+}
+
+export function Home({
+  data,
+  today,
+  onChange,
+  onReset,
+}: {
+  data: GuestData;
+  today: IsoDate;
+  onChange: (data: GuestData) => void;
+  onReset: () => void;
+}) {
+  const { periods, settings, dayLogs } = data;
+  const [tab, setTab] = useState<Tab>("today");
+  const [selected, setSelected] = useState<IsoDate | null>(null);
+  const [editing, setEditing] = useState<IsoDate | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const prediction = useMemo(
+    () =>
+      predict({
+        periods,
+        today,
+        defaultCycleLength: settings.cycleLength,
+        defaultPeriodLength: settings.periodLength,
+      }),
+    [periods, today, settings],
+  );
+  const periodLength = prediction?.periodLength ?? settings.periodLength;
+  const ongoing = ongoingPeriod(periods, today, periodLength);
+  const loggedDates = useMemo(() => new Set(Object.keys(dayLogs)), [dayLogs]);
+
+  const setPeriods = (next: GuestData["periods"]) => onChange({ ...data, periods: next });
+  const markStart = (date: IsoDate) => setPeriods(markPeriodStart(periods, date, periodLength));
+  const markEnd = (date: IsoDate) => {
+    const next = markPeriodEnd(periods, date);
+    if (next) setPeriods(next);
+    else setNotice("Не нашли месячные, которые начались в последние 2 недели до этой даты.");
+  };
+  const saveLog = (date: IsoDate, log: DayLog) => onChange({ ...data, dayLogs: setDayLog(dayLogs, date, log) });
+
+  return (
+    <>
+      <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-4 px-4 pb-28 pt-6">
+        {tab === "today" && (
+          <>
+            <header>
+              <p className="text-sm text-muted">Сегодня</p>
+              <h1 className="text-2xl font-semibold first-letter:uppercase">{formatLong(today)}</h1>
+            </header>
+
+            <CycleCard prediction={prediction} today={today} />
+
+            {prediction?.warnings.map((w) => (
+              <p key={w.type} className="rounded-2xl bg-warning-soft p-4 text-sm text-warning" role="note">
+                {warningText(w)}
+              </p>
+            ))}
+
+            {ongoing ? (
+              <Button onClick={() => markEnd(today)}>Месячные закончились сегодня</Button>
+            ) : (
+              <Button onClick={() => markStart(today)}>Месячные начались сегодня</Button>
+            )}
+
+            <Card className="flex flex-col gap-3">
+              <h2 className="text-lg font-semibold">Как вы сегодня?</h2>
+              <LogSummary log={dayLogs[today]} empty="Отметьте самочувствие, настроение и симптомы — так будет видно, как они связаны с циклом." />
+              <Button variant="secondary" onClick={() => setEditing(today)}>
+                {dayLogs[today] ? "Изменить" : "Отметить самочувствие"}
+              </Button>
+            </Card>
+
+            <Disclaimer />
+          </>
+        )}
+
+        {tab === "calendar" && (
+          <>
+            <Card>
+              <Calendar
+                periods={periods}
+                prediction={prediction}
+                today={today}
+                loggedDates={loggedDates}
+                selected={selected}
+                onSelect={(d) => {
+                  setNotice(null);
+                  setSelected(d === selected ? null : d);
+                }}
+              />
+            </Card>
+            {selected ? (
+              <DayPanel
+                date={selected}
+                today={today}
+                periods={periods}
+                periodLength={periodLength}
+                log={dayLogs[selected]}
+                notice={notice}
+                onStart={() => markStart(selected)}
+                onEnd={() => markEnd(selected)}
+                onRemove={(start) => setPeriods(removePeriod(periods, start))}
+                onEditLog={() => setEditing(selected)}
+                onClose={() => setSelected(null)}
+              />
+            ) : (
+              <p className="px-1 text-sm text-muted">Нажмите на день, чтобы отметить месячные или заполнить журнал.</p>
+            )}
+          </>
+        )}
+
+        {tab === "settings" && <SettingsTab data={data} onChange={onChange} onReset={onReset} today={today} />}
+      </main>
+
+      <nav
+        aria-label="Разделы"
+        className="fixed inset-x-0 bottom-0 z-10 border-t border-border bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur"
+      >
+        <ul className="mx-auto flex max-w-md">
+          {TABS.map((t) => (
+            <li key={t.id} className="flex-1">
+              <button
+                type="button"
+                aria-current={tab === t.id ? "page" : undefined}
+                onClick={() => setTab(t.id)}
+                className={`flex w-full flex-col items-center gap-0.5 py-3 text-xs ${
+                  tab === t.id ? "font-semibold text-accent" : "text-muted"
+                }`}
+              >
+                <span aria-hidden className="text-lg leading-none">
+                  {t.icon}
+                </span>
+                {t.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </nav>
+
+      {editing && (
+        <DayLogEditor
+          key={editing}
+          date={editing}
+          log={dayLogs[editing]}
+          onChange={(log) => saveLog(editing, log)}
+          onClose={() => setEditing(null)}
+        />
+      )}
+    </>
+  );
+}
+
+function CycleCard({ prediction, today }: { prediction: Prediction | null; today: IsoDate }) {
+  if (!prediction) {
+    return (
+      <Card>
+        <p className="text-base">
+          Отметьте первый день месячных — и мы построим прогноз. Прошедший день можно выбрать во вкладке «Календарь».
+        </p>
+      </Card>
+    );
+  }
+  return (
+    <Card className="flex flex-col gap-4">
+      <div>
+        <div className="text-5xl font-semibold tabular-nums">
+          {prediction.cycleDay}
+          <span className="ml-2 text-lg font-normal text-muted">день цикла</span>
+        </div>
+        <div className="mt-1 text-base font-medium text-accent">{phaseLabel[prediction.phase]}</div>
+      </div>
+      <dl className="grid gap-3 text-sm">
+        <div>
+          <dt className="text-muted">Следующие месячные</dt>
+          <dd className="text-base font-medium">{nextPeriodText(prediction, today)}</dd>
+        </div>
+        <div>
+          <dt className="text-muted">Фертильное окно</dt>
+          <dd className="text-base font-medium">
+            {formatRange(prediction.fertileWindow.start, prediction.fertileWindow.end)}
+          </dd>
+        </div>
+      </dl>
+      {!prediction.basedOnHistory && (
+        <p className="text-sm text-muted">
+          Пока прогноз по вашим ответам. Он станет точнее, когда вы отметите начало следующих месячных.
+        </p>
+      )}
+    </Card>
+  );
+}
+
+function LogSummary({ log, empty }: { log: DayLog | undefined; empty: string }) {
+  const items = log ? summarizeLog(log) : [];
+  if (items.length === 0 && !log?.note) return <p className="text-sm text-muted">{empty}</p>;
+  return (
+    <div className="flex flex-col gap-2">
+      {items.length > 0 && (
+        <ul className="flex flex-wrap gap-1.5">
+          {items.map((label) => (
+            <li key={label} className="rounded-full bg-period-soft px-3 py-1 text-sm">
+              {label}
+            </li>
+          ))}
+        </ul>
+      )}
+      {log?.note && <p className="whitespace-pre-wrap text-sm text-muted">{log.note}</p>}
+    </div>
+  );
+}
+
+function DayPanel({
+  date,
+  today,
+  periods,
+  periodLength,
+  log,
+  notice,
+  onStart,
+  onEnd,
+  onRemove,
+  onEditLog,
+  onClose,
+}: {
+  date: IsoDate;
+  today: IsoDate;
+  periods: GuestData["periods"];
+  periodLength: number;
+  log: DayLog | undefined;
+  notice: string | null;
+  onStart: () => void;
+  onEnd: () => void;
+  onRemove: (start: IsoDate) => void;
+  onEditLog: () => void;
+  onClose: () => void;
+}) {
+  const isFuture = compareDates(date, today) > 0;
+  const period = findPeriodAt(periods, date, periodLength);
+
+  return (
+    <Card className="flex flex-col gap-3">
+      <div className="flex items-start justify-between gap-2">
+        <h2 className="text-lg font-semibold first-letter:uppercase">{formatLong(date)}</h2>
+        <Button variant="ghost" className="-mr-3 -mt-2 px-3" onClick={onClose} aria-label="Закрыть">
+          ✕
+        </Button>
+      </div>
+
+      {isFuture ? (
+        <p className="text-sm text-muted">Будущие дни отметить нельзя — здесь только прогноз.</p>
+      ) : (
+        <>
+          <LogSummary log={log} empty="Журнал за этот день пуст." />
+          <Button variant="secondary" onClick={onEditLog}>
+            {log ? "Изменить журнал дня" : "Заполнить журнал дня"}
+          </Button>
+          {period ? (
+            <>
+              <p className="text-sm text-muted">
+                Месячные с {formatDayMonth(period.start)}
+                {period.end ? ` по ${formatDayMonth(period.end)}` : " (конец не отмечен)"}.
+              </p>
+              {date !== period.start && <Button onClick={onEnd}>Закончились в этот день</Button>}
+              <Button variant="danger" onClick={() => onRemove(period.start)}>
+                Удалить эти месячные
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button onClick={onStart}>Месячные начались в этот день</Button>
+              <Button variant="secondary" onClick={onEnd}>
+                Месячные закончились в этот день
+              </Button>
+            </>
+          )}
+        </>
+      )}
+      {notice && <p className="text-sm text-warning">{notice}</p>}
+    </Card>
+  );
+}
+
+function exportData(data: GuestData, today: IsoDate) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `cycle-tracker-${today}.json`;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  // Сразу отзывать ссылку нельзя: часть браузеров ещё не начала скачивание.
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function SettingsTab({
+  data,
+  today,
+  onChange,
+  onReset,
+}: {
+  data: GuestData;
+  today: IsoDate;
+  onChange: (data: GuestData) => void;
+  onReset: () => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const set = (patch: Partial<GuestData["settings"]>) => onChange({ ...data, settings: { ...data.settings, ...patch } });
+
+  return (
+    <>
+      <h1 className="text-2xl font-semibold">Настройки</h1>
+
+      <Card className="flex flex-col gap-5">
+        <div className="flex flex-col gap-2">
+          <p className="text-sm text-muted">Обычная длина цикла — пока отмечено мало циклов</p>
+          <Stepper
+            label="Длина цикла"
+            value={data.settings.cycleLength}
+            min={15}
+            max={60}
+            onChange={(cycleLength) => set({ cycleLength })}
+            unit={pluralDays}
+          />
+        </div>
+        <div className="flex flex-col gap-2">
+          <p className="text-sm text-muted">Обычная длина месячных</p>
+          <Stepper
+            label="Длина месячных"
+            value={data.settings.periodLength}
+            min={1}
+            max={14}
+            onChange={(periodLength) => set({ periodLength })}
+            unit={pluralDays}
+          />
+        </div>
+      </Card>
+
+      <Card className="flex flex-col gap-3">
+        <h2 className="text-lg font-semibold">Ваши данные</h2>
+        <p className="text-sm text-muted">
+          Данные хранятся только в этом браузере. Если очистить данные сайта или сменить устройство, они пропадут —
+          синхронизация появится вместе с регистрацией.
+        </p>
+        <Button variant="secondary" onClick={() => exportData(data, today)}>
+          Скачать мои данные
+        </Button>
+        {confirming ? (
+          <div className="flex flex-col gap-2">
+            <p className="text-sm">Удалить все отметки, журнал и настройки с этого устройства? Это нельзя отменить.</p>
+            <div className="flex gap-2">
+              <Button variant="danger" className="flex-1" onClick={onReset}>
+                Удалить
+              </Button>
+              <Button variant="secondary" className="flex-1" onClick={() => setConfirming(false)}>
+                Отмена
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Button variant="danger" onClick={() => setConfirming(true)}>
+            Удалить все данные
+          </Button>
+        )}
+      </Card>
+
+      <Disclaimer />
+    </>
+  );
+}
