@@ -10,7 +10,15 @@ import { Button, Disclaimer, Stepper } from "./ui";
 type Step = "welcome" | "last-period" | "cycle" | "period";
 const STEPS: Step[] = ["welcome", "last-period", "cycle", "period"];
 
-export function Onboarding({ today, onDone }: { today: IsoDate; onDone: (data: GuestData) => void }) {
+export function Onboarding({
+  today,
+  onDone,
+  onSignIn,
+}: {
+  today: IsoDate;
+  onDone: (data: GuestData) => void;
+  onSignIn: (() => void) | null;
+}) {
   const [step, setStep] = useState<Step>("welcome");
   const [lastPeriod, setLastPeriod] = useState<IsoDate | null>(null);
   const [cycleLength, setCycleLength] = useState(DEFAULT_CYCLE_LENGTH);
@@ -53,6 +61,11 @@ export function Onboarding({ today, onDone }: { today: IsoDate; onDone: (data: G
             Регистрация не нужна. Пока вы не создадите аккаунт, данные хранятся только на этом устройстве.
           </p>
           <Button onClick={next}>Начать</Button>
+          {onSignIn && (
+            <Button variant="ghost" onClick={onSignIn}>
+              У меня уже есть аккаунт — войти
+            </Button>
+          )}
           <Disclaimer />
         </div>
       )}

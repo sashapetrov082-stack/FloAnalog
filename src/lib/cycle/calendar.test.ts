@@ -47,6 +47,8 @@ describe("отметки месячных", () => {
     expect(ongoingPeriod(open, "2026-10-02", 5)?.start).toBe("2026-09-29");
     expect(ongoingPeriod(open, "2026-10-10", 5)).toBeUndefined();
     expect(ongoingPeriod(base, "2026-09-10", 5)).toBeUndefined();
+    // Конец уже отмечен — месячные не считаются идущими, даже если конец сегодня.
+    expect(ongoingPeriod(base, "2026-09-05", 5)).toBeUndefined();
   });
 });
 

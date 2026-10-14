@@ -206,4 +206,26 @@ do $$ begin
 end $$;
 select pg_temp.logout();
 
+-- 20. Удаление аккаунта: удаляются только свои данные, гость удалить ничего не может.
+set role anon;
+do $$ begin
+  begin perform public.delete_my_account(); raise exception 'FAIL 20: гость';
+  exception when insufficient_privilege then null; end;
+end $$;
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+select public.delete_my_account();
+select pg_temp.logout();
+do $$ begin
+  if exists (select 1 from auth.users where id = '00000000-0000-0000-0000-00000000000a') then
+    raise exception 'FAIL 20: пользователь не удалён'; end if;
+  if exists (select 1 from public.periods where user_id = '00000000-0000-0000-0000-00000000000a')
+     or exists (select 1 from public.day_logs where user_id = '00000000-0000-0000-0000-00000000000a')
+     or exists (select 1 from public.profiles where id = '00000000-0000-0000-0000-00000000000a')
+     or exists (select 1 from public.partner_links where owner_id = '00000000-0000-0000-0000-00000000000a') then
+    raise exception 'FAIL 20: остались данные'; end if;
+  if not exists (select 1 from auth.users where id = '00000000-0000-0000-0000-00000000000b') then
+    raise exception 'FAIL 20: удалён чужой аккаунт'; end if;
+end $$;
+
 \echo 'Все проверки доступа пройдены'

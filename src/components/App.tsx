@@ -1,61 +1,65 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import type { IsoDate } from "@/lib/cycle/dates";
-import { clearGuestData, loadGuestData, saveGuestData, type GuestData } from "@/lib/guest/store";
-import { todayLocal } from "@/lib/format";
-import { Home } from "./Home";
+import { useState } from "react";
+import { getSupabase } from "@/lib/supabase/client";
+import { AuthDialog } from "./AuthDialog";
+import { Home, type AccountInfo } from "./Home";
 import { Onboarding } from "./Onboarding";
-
-type State =
-  | { status: "loading" }
-  | { status: "error" }
-  | { status: "ready"; data: GuestData | null; today: IsoDate };
+import { useCycleData } from "./useCycleData";
 
 export function App() {
-  const [state, setState] = useState<State>({ status: "loading" });
+  const { state, save, resetGuest, signedIn, signOut, removeAccount, retrySync } = useCycleData();
+  const [authOpen, setAuthOpen] = useState(false);
+  const authAvailable = getSupabase() !== null;
 
-  useEffect(() => {
-    loadGuestData()
-      .then((data) => setState({ status: "ready", data, today: todayLocal() }))
-      .catch(() => setState({ status: "error" }));
-  }, []);
-
-  // Если вкладка открыта через полночь — обновляем «сегодня».
-  useEffect(() => {
-    const refresh = () =>
-      setState((s) => (s.status === "ready" && s.today !== todayLocal() ? { ...s, today: todayLocal() } : s));
-    document.addEventListener("visibilitychange", refresh);
-    return () => document.removeEventListener("visibilitychange", refresh);
-  }, []);
-
-  if (state.status === "loading") return <main className="flex-1" aria-busy />;
+  if (state.status === "loading" || (state.status === "account" && !state.data)) {
+    return <main className="flex-1" aria-busy />;
+  }
 
   if (state.status === "error") {
     return (
       <main className="mx-auto flex max-w-md flex-1 flex-col justify-center gap-3 px-4">
-        <h1 className="text-xl font-semibold">Не получилось открыть хранилище</h1>
-        <p className="text-muted">
-          Браузер не даёт сохранять данные на устройстве — так бывает в режиме инкогнито или при запрете
-          хранения данных сайтов. Откройте сайт в обычной вкладке.
-        </p>
+        <h1 className="text-xl font-semibold">Что-то пошло не так</h1>
+        <p className="text-muted">{state.message}</p>
       </main>
     );
   }
 
-  const save = (data: GuestData) => {
-    setState({ ...state, data });
-    saveGuestData(data).catch(() => setState({ status: "error" }));
-  };
+  const account: AccountInfo | null =
+    state.status === "account"
+      ? {
+          email: state.email,
+          sync: state.sync,
+          onSignOut: signOut,
+          onDelete: removeAccount,
+          onRetry: () => void retrySync(),
+        }
+      : null;
+  const openAuth = authAvailable ? () => setAuthOpen(true) : null;
 
-  const reset = () => {
-    setState({ ...state, data: null });
-    clearGuestData().catch(() => setState({ status: "error" }));
-  };
-
-  return state.data ? (
-    <Home data={state.data} today={state.today} onChange={save} onReset={reset} />
-  ) : (
-    <Onboarding today={state.today} onDone={save} />
+  return (
+    <>
+      {state.data ? (
+        <Home
+          data={state.data}
+          today={state.today}
+          onChange={save}
+          onReset={resetGuest}
+          account={account}
+          onSignIn={openAuth}
+        />
+      ) : (
+        <Onboarding today={state.today} onDone={save} onSignIn={openAuth} />
+      )}
+      {authOpen && (
+        <AuthDialog
+          onClose={() => setAuthOpen(false)}
+          onSignedIn={(user) => {
+            setAuthOpen(false);
+            signedIn(user);
+          }}
+        />
+      )}
+    </>
   );
 }

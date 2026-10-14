@@ -60,13 +60,12 @@ export function removePeriod(periods: Period[], start: IsoDate): Period[] {
   return periods.filter((p) => p.start !== start);
 }
 
-/** Идут ли месячные сейчас: начались недавно и конец не отмечен или ещё не наступил. */
+/** Идут ли месячные сейчас: начались недавно, а конец ещё не отмечен. */
 export function ongoingPeriod(periods: Period[], today: IsoDate, periodLength: number): Period | undefined {
   const last = sortPeriods(periods)
     .filter((p) => compareDates(p.start, today) <= 0)
     .at(-1);
-  if (!last) return undefined;
-  if (last.end) return compareDates(today, last.end) <= 0 ? last : undefined;
+  if (!last || last.end) return undefined;
   // Конец не отмечен: считаем, что идут, пока не прошла ожидаемая длина + 2 дня запаса.
   return diffDays(last.start, today) < periodLength + 2 ? last : undefined;
 }

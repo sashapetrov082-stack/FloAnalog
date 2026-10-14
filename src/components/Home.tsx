@@ -15,9 +15,18 @@ import { formatDayMonth, formatLong, formatRange, pluralDays } from "@/lib/forma
 import { setDayLog, summarizeLog, type DayLog } from "@/lib/journal";
 import { Calendar } from "./Calendar";
 import { DayLogEditor } from "./DayLogEditor";
+import type { SyncStatus } from "./useCycleData";
 import { Button, Card, Disclaimer, Stepper } from "./ui";
 
 type Tab = "today" | "calendar" | "settings";
+
+export interface AccountInfo {
+  email: string;
+  sync: SyncStatus;
+  onSignOut: () => Promise<void>;
+  onDelete: () => Promise<void>;
+  onRetry: () => void;
+}
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: "today", label: "Сегодня", icon: "●" },
@@ -57,11 +66,15 @@ export function Home({
   today,
   onChange,
   onReset,
+  account,
+  onSignIn,
 }: {
   data: GuestData;
   today: IsoDate;
   onChange: (data: GuestData) => void;
   onReset: () => void;
+  account: AccountInfo | null;
+  onSignIn: (() => void) | null;
 }) {
   const { periods, settings, dayLogs } = data;
   const [tab, setTab] = useState<Tab>("today");
@@ -81,6 +94,7 @@ export function Home({
   );
   const periodLength = prediction?.periodLength ?? settings.periodLength;
   const ongoing = ongoingPeriod(periods, today, periodLength);
+  const todayPeriod = findPeriodAt(periods, today, periodLength);
   const loggedDates = useMemo(() => new Set(Object.keys(dayLogs)), [dayLogs]);
 
   const setPeriods = (next: GuestData["periods"]) => onChange({ ...data, periods: next });
@@ -97,6 +111,11 @@ export function Home({
       <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-4 px-4 pb-28 pt-6">
         {tab === "today" && (
           <>
+            {account?.sync === "offline" && (
+              <p className="rounded-2xl bg-warning-soft p-3 text-sm text-warning" role="status">
+                Нет связи с сервером. Изменения сохранены на устройстве и отправятся, когда появится интернет.
+              </p>
+            )}
             <header>
               <p className="text-sm text-muted">Сегодня</p>
               <h1 className="text-2xl font-semibold first-letter:uppercase">{formatLong(today)}</h1>
@@ -112,6 +131,10 @@ export function Home({
 
             {ongoing ? (
               <Button onClick={() => markEnd(today)}>Месячные закончились сегодня</Button>
+            ) : todayPeriod?.end ? (
+              <p className="rounded-2xl bg-period-soft p-4 text-sm">
+                Месячные отмечены: {formatRange(todayPeriod.start, todayPeriod.end)}. Изменить можно в календаре.
+              </p>
             ) : (
               <Button onClick={() => markStart(today)}>Месячные начались сегодня</Button>
             )}
@@ -163,7 +186,16 @@ export function Home({
           </>
         )}
 
-        {tab === "settings" && <SettingsTab data={data} onChange={onChange} onReset={onReset} today={today} />}
+        {tab === "settings" && (
+          <SettingsTab
+            data={data}
+            onChange={onChange}
+            onReset={onReset}
+            today={today}
+            account={account}
+            onSignIn={onSignIn}
+          />
+        )}
       </main>
 
       <nav
@@ -347,16 +379,120 @@ function exportData(data: GuestData, today: IsoDate) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+const syncLabel: Record<SyncStatus, string> = {
+  synced: "Все данные сохранены в аккаунте",
+  syncing: "Сохраняем…",
+  offline: "Нет связи — изменения отправятся позже",
+};
+
+function AccountCard({ account, onSignIn }: { account: AccountInfo | null; onSignIn: (() => void) | null }) {
+  const [confirming, setConfirming] = useState<"signout" | "delete" | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (!account) {
+    return (
+      <Card className="flex flex-col gap-3">
+        <h2 className="text-lg font-semibold">Аккаунт</h2>
+        {onSignIn ? (
+          <>
+            <p className="text-sm text-muted">
+              Войдите по почте, чтобы данные не потерялись при смене телефона и были доступны на всех устройствах. Пароль не
+              нужен.
+            </p>
+            <Button onClick={onSignIn}>Войти или создать аккаунт</Button>
+          </>
+        ) : (
+          <p className="text-sm text-muted">Вход по почте скоро появится.</p>
+        )}
+      </Card>
+    );
+  }
+
+  const run = async (action: () => Promise<void>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await action();
+    } catch {
+      setError("Не получилось. Проверьте интернет и попробуйте ещё раз.");
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card className="flex flex-col gap-3">
+      <h2 className="text-lg font-semibold">Аккаунт</h2>
+      <p className="text-base">{account.email}</p>
+      <p className={`text-sm ${account.sync === "offline" ? "text-warning" : "text-muted"}`}>
+        {syncLabel[account.sync]}
+      </p>
+      {account.sync === "offline" && (
+        <Button variant="secondary" onClick={account.onRetry}>
+          Повторить отправку
+        </Button>
+      )}
+
+      {confirming === "signout" ? (
+        <div className="flex flex-col gap-2">
+          <p className="text-sm">
+            {account.sync === "synced"
+              ? "Данные останутся в аккаунте, а с этого устройства будут удалены."
+              : "Часть изменений ещё не отправлена и пропадёт при выходе. Лучше дождаться связи."}
+          </p>
+          <div className="flex gap-2">
+            <Button variant="secondary" className="flex-1" disabled={busy} onClick={() => run(account.onSignOut)}>
+              Выйти
+            </Button>
+            <Button variant="ghost" className="flex-1" onClick={() => setConfirming(null)}>
+              Отмена
+            </Button>
+          </div>
+        </div>
+      ) : confirming === "delete" ? (
+        <div className="flex flex-col gap-2">
+          <p className="text-sm">
+            Аккаунт и все данные — месячные, журнал, настройки — будут удалены с сервера и с этого устройства. Это нельзя
+            отменить.
+          </p>
+          <div className="flex gap-2">
+            <Button variant="danger" className="flex-1" disabled={busy} onClick={() => run(account.onDelete)}>
+              Удалить навсегда
+            </Button>
+            <Button variant="ghost" className="flex-1" onClick={() => setConfirming(null)}>
+              Отмена
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <Button variant="secondary" onClick={() => setConfirming("signout")}>
+            Выйти
+          </Button>
+          <Button variant="danger" onClick={() => setConfirming("delete")}>
+            Удалить аккаунт
+          </Button>
+        </>
+      )}
+      {error && <p className="text-sm text-warning">{error}</p>}
+    </Card>
+  );
+}
+
 function SettingsTab({
   data,
   today,
   onChange,
   onReset,
+  account,
+  onSignIn,
 }: {
   data: GuestData;
   today: IsoDate;
   onChange: (data: GuestData) => void;
   onReset: () => void;
+  account: AccountInfo | null;
+  onSignIn: (() => void) | null;
 }) {
   const [confirming, setConfirming] = useState(false);
   const set = (patch: Partial<GuestData["settings"]>) => onChange({ ...data, settings: { ...data.settings, ...patch } });
@@ -364,6 +500,8 @@ function SettingsTab({
   return (
     <>
       <h1 className="text-2xl font-semibold">Настройки</h1>
+
+      <AccountCard account={account} onSignIn={onSignIn} />
 
       <Card className="flex flex-col gap-5">
         <div className="flex flex-col gap-2">
@@ -392,14 +530,16 @@ function SettingsTab({
 
       <Card className="flex flex-col gap-3">
         <h2 className="text-lg font-semibold">Ваши данные</h2>
-        <p className="text-sm text-muted">
-          Данные хранятся только в этом браузере. Если очистить данные сайта или сменить устройство, они пропадут —
-          синхронизация появится вместе с регистрацией.
-        </p>
+        {!account && (
+          <p className="text-sm text-muted">
+            Сейчас данные хранятся только в этом браузере. Если очистить данные сайта или сменить устройство, они
+            пропадут — чтобы этого не случилось, войдите в аккаунт.
+          </p>
+        )}
         <Button variant="secondary" onClick={() => exportData(data, today)}>
           Скачать мои данные
         </Button>
-        {confirming ? (
+        {account ? null : confirming ? (
           <div className="flex flex-col gap-2">
             <p className="text-sm">Удалить все отметки, журнал и настройки с этого устройства? Это нельзя отменить.</p>
             <div className="flex gap-2">

@@ -3,8 +3,12 @@
 create schema if not exists auth;
 create schema if not exists extensions;
 create table if not exists auth.users (id uuid primary key, email text);
+-- Как в Supabase: sub из JWT (PostgREST кладёт его в request.jwt.claims) или из request.jwt.claim.sub.
 create or replace function auth.uid() returns uuid language sql stable as $$
-  select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
+  select coalesce(
+    nullif(current_setting('request.jwt.claim.sub', true), ''),
+    nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub'
+  )::uuid
 $$;
 do $$ begin
   if not exists (select 1 from pg_roles where rolname = 'anon') then create role anon nologin; end if;

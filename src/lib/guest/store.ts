@@ -1,5 +1,5 @@
-// Гостевой режим: все данные хранятся только в браузере (IndexedDB).
-// При регистрации они переедут в аккаунт (сделаем вместе с синхронизацией).
+// Хранилище на устройстве (IndexedDB): гостевые данные и копия данных аккаунта.
+// Гостевые данные при входе переезжают в аккаунт (см. src/lib/sync).
 
 import type { Period } from "@/lib/cycle/predict";
 import { assertIsoDate } from "@/lib/cycle/dates";
@@ -90,15 +90,26 @@ export function parseGuestData(raw: unknown): GuestData | null {
   }
 }
 
+export async function readRecord(key: string): Promise<unknown> {
+  return withStore("readonly", (store) => store.get(key));
+}
+
+export async function writeRecord(key: string, value: unknown): Promise<void> {
+  await withStore("readwrite", (store) => store.put(value, key));
+}
+
+export async function deleteRecord(key: string): Promise<void> {
+  await withStore("readwrite", (store) => store.delete(key));
+}
+
 export async function loadGuestData(): Promise<GuestData | null> {
-  const raw = await withStore("readonly", (store) => store.get(KEY));
-  return parseGuestData(raw);
+  return parseGuestData(await readRecord(KEY));
 }
 
 export async function saveGuestData(data: GuestData): Promise<void> {
-  await withStore("readwrite", (store) => store.put(data, KEY));
+  await writeRecord(KEY, data);
 }
 
 export async function clearGuestData(): Promise<void> {
-  await withStore("readwrite", (store) => store.delete(KEY));
+  await deleteRecord(KEY);
 }
