@@ -551,7 +551,23 @@ $$;
 -- Права
 -- ---------------------------------------------------------------------------
 
-revoke all on all tables in schema public from anon;
+-- Права на таблицы выдаём явно и минимально, не полагаясь на настройку
+-- «Automatically expose new tables»: сначала забираем всё, потом даём нужное.
+-- Строки при этом всё равно режет RLS.
+revoke all on all tables in schema public from anon, authenticated;
+revoke all on all sequences in schema public from anon, authenticated;
+
+grant select, update on public.profiles to authenticated;
+grant select, insert, update, delete on public.periods to authenticated;
+grant select, insert, update, delete on public.day_logs to authenticated;
+grant select, insert, update, delete on public.daily_status to authenticated;
+grant select, insert, update, delete on public.predictions to authenticated;
+grant select on public.partner_links to authenticated;
+grant select, update on public.share_settings to authenticated;
+grant select, insert, update, delete on public.shared_notes to authenticated;
+grant select on public.access_log to authenticated;
+-- invite_codes и invite_attempts — без прав: доступ только через функции.
+
 revoke all on function public.is_link_member(uuid) from public, anon;
 revoke all on function public.is_adult(uuid) from public, anon;
 revoke all on function public.handle_new_user() from public, anon, authenticated;

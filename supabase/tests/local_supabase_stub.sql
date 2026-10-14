@@ -12,6 +12,7 @@ do $$ begin
 end $$;
 grant usage on schema public, auth, extensions to anon, authenticated;
 grant execute on function auth.uid() to anon, authenticated;
--- В Supabase у authenticated по умолчанию есть права на таблицы public; доступ режет RLS.
+-- Имитируем худший случай — «Automatically expose new tables» включено:
+-- миграция должна сама забрать лишние права и выдать только нужные.
 alter default privileges in schema public grant all on tables to authenticated, anon;
 alter default privileges in schema public grant all on sequences to authenticated, anon;

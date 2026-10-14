@@ -42,10 +42,10 @@ end $$;
 select pg_temp.logout(); select pg_temp.login('00000000-0000-0000-0000-00000000000a');
 insert into ctx values ('code', public.create_invite_code());
 
-do $$ declare n int; begin
-  -- 2. Таблица кодов клиенту не видна вовсе.
-  select count(*) into n from public.invite_codes;
-  if n <> 0 then raise exception 'FAIL 2: invite_codes видны клиенту'; end if;
+do $$ begin
+  -- 2. Таблица кодов клиенту недоступна вовсе.
+  begin perform count(*) from public.invite_codes; raise exception 'FAIL 2: invite_codes видны клиенту';
+  exception when insufficient_privilege then null; end;
 end $$;
 
 -- 3. Код хранится только в виде хэша.
@@ -190,5 +190,20 @@ do $$ begin
   exception when insufficient_privilege then null; end;
 end $$;
 reset role;
+
+-- 19. Клиент не может напрямую писать в связи, журнал и коды.
+select pg_temp.login('00000000-0000-0000-0000-00000000000b');
+do $$ begin
+  begin
+    insert into public.partner_links (owner_id, partner_id)
+    values ('00000000-0000-0000-0000-00000000000a', '00000000-0000-0000-0000-00000000000b');
+    raise exception 'FAIL 19: partner_links';
+  exception when insufficient_privilege then null; end;
+  begin
+    insert into public.access_log (link_id, viewer_id, what) values (gen_random_uuid(), auth.uid(), '{}');
+    raise exception 'FAIL 19: access_log';
+  exception when insufficient_privilege then null; end;
+end $$;
+select pg_temp.logout();
 
 \echo 'Все проверки доступа пройдены'
