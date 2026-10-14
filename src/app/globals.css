@@ -1,25 +1,57 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #fbf8f7;
+  --foreground: #1f1a1c;
+  --surface: #ffffff;
+  --muted: #6f6669;
+  --border: #ebe3e2;
+  --accent: #c2416b;
+  --accent-foreground: #ffffff;
+  --period: #e0557f;
+  --period-soft: #fbe3ea;
+  --fertile: #2f9e8f;
+  --fertile-soft: #dcf2ee;
+  --warning-soft: #fdf3e1;
+  --warning: #8a5a12;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #141113;
+    --foreground: #f2ecee;
+    --surface: #1e1a1c;
+    --muted: #a99ea2;
+    --border: #2f292c;
+    --accent: #ec6f96;
+    --accent-foreground: #1a0c12;
+    --period: #ec6f96;
+    --period-soft: #45202d;
+    --fertile: #4cc2b1;
+    --fertile-soft: #173a35;
+    --warning-soft: #3a2c14;
+    --warning: #f0c98a;
+  }
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-period: var(--period);
+  --color-period-soft: var(--period-soft);
+  --color-fertile: var(--fertile);
+  --color-fertile-soft: var(--fertile-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
   --font-sans: var(--font-geist-sans);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
 }

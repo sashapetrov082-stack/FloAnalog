@@ -9,7 +9,7 @@ const geistSans = Geist({
 
 export const metadata: Metadata = {
   title: "Трекер цикла",
-  description: "Календарь цикла и режим пары",
+  description: "Календарь цикла, прогноз месячных и режим пары",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

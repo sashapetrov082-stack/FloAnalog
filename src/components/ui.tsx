@@ -1,0 +1,81 @@
+// Мелкие общие элементы интерфейса.
+
+import type { ButtonHTMLAttributes, ReactNode } from "react";
+
+type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
+
+const variants: Record<ButtonVariant, string> = {
+  primary: "bg-accent text-accent-foreground hover:opacity-90",
+  secondary: "border border-border bg-surface hover:bg-background",
+  ghost: "text-muted hover:text-foreground",
+  danger: "border border-border bg-surface text-red-600 hover:bg-background dark:text-red-400",
+};
+
+export function Button({
+  variant = "primary",
+  className = "",
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant }) {
+  return (
+    <button
+      type="button"
+      className={`min-h-11 rounded-2xl px-5 py-3 text-base font-medium transition disabled:opacity-40 ${variants[variant]} ${className}`}
+      {...props}
+    />
+  );
+}
+
+export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return <section className={`rounded-3xl border border-border bg-surface p-5 ${className}`}>{children}</section>;
+}
+
+/** Выбор числа кнопками «−» и «+». */
+export function Stepper({
+  value,
+  min,
+  max,
+  onChange,
+  unit,
+  label,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  onChange: (value: number) => void;
+  unit: (n: number) => string;
+  label: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4" role="group" aria-label={label}>
+      <Button
+        variant="secondary"
+        className="w-14 text-2xl"
+        aria-label="Меньше"
+        disabled={value <= min}
+        onClick={() => onChange(value - 1)}
+      >
+        −
+      </Button>
+      <div className="text-center text-3xl font-semibold tabular-nums" aria-live="polite">
+        {unit(value)}
+      </div>
+      <Button
+        variant="secondary"
+        className="w-14 text-2xl"
+        aria-label="Больше"
+        disabled={value >= max}
+        onClick={() => onChange(value + 1)}
+      >
+        +
+      </Button>
+    </div>
+  );
+}
+
+export function Disclaimer() {
+  return (
+    <p className="text-sm text-muted">
+      Прогноз приблизительный. Приложение не является методом контрацепции и не ставит диагнозов.
+    </p>
+  );
+}
