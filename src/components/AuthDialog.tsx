@@ -37,7 +37,12 @@ export function AuthDialog({ onSignedIn, onClose }: { onSignedIn: (user: User) =
     if (!sb) return;
     setBusy(true);
     setError(null);
-    const { error } = await sb.auth.signInWithOtp({ email: email.trim(), options: { shouldCreateUser: true } });
+    const { error } = await sb.auth.signInWithOtp({
+      email: email.trim(),
+      // Пока письма идут через стандартные шаблоны Supabase, в них ссылка, а не код:
+      // она ведёт обратно на этот сайт, и вход завершается автоматически.
+      options: { shouldCreateUser: true, emailRedirectTo: window.location.origin },
+    });
     setBusy(false);
     if (error) return setError(authErrorText(error));
     setCode("");
@@ -76,7 +81,7 @@ export function AuthDialog({ onSignedIn, onClose }: { onSignedIn: (user: User) =
             }}
           >
             <p className="text-muted">
-              Пароль не нужен: пришлём на почту код для входа. Если аккаунта ещё нет, он создастся. Данные с этого
+              Пароль не нужен: пришлём на почту код или ссылку для входа. Если аккаунта ещё нет, он создастся. Данные с этого
               устройства перенесутся в аккаунт.
             </p>
             <label className="flex flex-col gap-2">
@@ -115,8 +120,11 @@ export function AuthDialog({ onSignedIn, onClose }: { onSignedIn: (user: User) =
             }}
           >
             <p className="text-muted">
-              Отправили код на <span className="font-medium text-foreground">{email.trim()}</span>. Письмо может прийти
-              через минуту; проверьте папку «Спам».
+              Отправили письмо на <span className="font-medium text-foreground">{email.trim()}</span>. Оно может
+              прийти через минуту; проверьте папку «Спам».
+            </p>
+            <p className="rounded-2xl bg-fertile-soft p-4 text-sm">
+              Если в письме ссылка, а не код, откройте её в этом же браузере — вход произойдёт автоматически.
             </p>
             <input
               autoComplete="one-time-code"

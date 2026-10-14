@@ -104,6 +104,9 @@ export function useCycleData() {
         }
         // 2. Свежие данные с сервера (могли измениться на другом устройстве).
         let remote = await fetchAccountData(sb, user.id);
+        // Согласие дано галочкой перед отправкой письма; записываем при первом входе —
+        // и по коду, и по ссылке из письма. Повторные входы ничего не меняют.
+        await recordHealthConsent(sb, user.id).catch(() => undefined);
         // 3. Гостевые данные с этого устройства переезжают в аккаунт.
         const guest = await loadGuestData();
         if (guest) {
@@ -189,14 +192,7 @@ export function useCycleData() {
   }, []);
 
   /** Вызывается после успешной проверки кода из письма. */
-  const signedIn = useCallback(
-    async (user: User) => {
-      const sb = getSupabase();
-      if (sb) await recordHealthConsent(sb, user.id).catch(() => undefined);
-      await enterAccount(user);
-    },
-    [enterAccount],
-  );
+  const signedIn = useCallback((user: User) => enterAccount(user), [enterAccount]);
 
   /** Выход: данные остаются в аккаунте, копия с устройства удаляется. */
   const signOut = useCallback(async () => {
