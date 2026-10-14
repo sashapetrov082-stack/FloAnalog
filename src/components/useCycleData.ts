@@ -18,7 +18,7 @@ import {
   writeRecord,
   type GuestData,
 } from "@/lib/guest/store";
-import { getSupabase } from "@/lib/supabase/client";
+import { cleanAuthParamsFromUrl, getSupabase, linkSignInProblem } from "@/lib/supabase/client";
 import { diffData, isEmptyOps, mergeGuestIntoAccount } from "@/lib/sync/diff";
 import { deleteAccount, fetchAccountData, pushOps, recordHealthConsent } from "@/lib/sync/remote";
 
@@ -47,6 +47,8 @@ async function readCache(userId: string): Promise<AccountCache | null> {
 
 export function useCycleData() {
   const [state, setState] = useState<CycleState>({ status: "loading" });
+  /** Сообщение о неудачном входе по ссылке из письма. */
+  const [authNotice, setAuthNotice] = useState<string | null>(null);
   const userRef = useRef<User | null>(null);
   const cacheRef = useRef<AccountCache | null>(null);
   const queue = useRef<Promise<void>>(Promise.resolve());
@@ -142,6 +144,8 @@ export function useCycleData() {
       try {
         const sb = getSupabase();
         const session = sb ? (await sb.auth.getSession()).data.session : null;
+        setAuthNotice(linkSignInProblem(Boolean(session)));
+        cleanAuthParamsFromUrl();
         if (session) return enterAccount(session.user);
         setState({ status: "guest", data: await loadGuestData(), today: todayLocal() });
       } catch {
@@ -219,5 +223,15 @@ export function useCycleData() {
     setState({ status: "guest", data: null, today: todayLocal() });
   }, []);
 
-  return { state, save, resetGuest, signedIn, signOut, removeAccount, retrySync: flush };
+  return {
+    state,
+    save,
+    resetGuest,
+    signedIn,
+    signOut,
+    removeAccount,
+    retrySync: flush,
+    authNotice,
+    dismissAuthNotice: () => setAuthNotice(null),
+  };
 }

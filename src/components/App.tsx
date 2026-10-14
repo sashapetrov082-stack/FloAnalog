@@ -8,7 +8,8 @@ import { Onboarding } from "./Onboarding";
 import { useCycleData } from "./useCycleData";
 
 export function App() {
-  const { state, save, resetGuest, signedIn, signOut, removeAccount, retrySync } = useCycleData();
+  const { state, save, resetGuest, signedIn, signOut, removeAccount, retrySync, authNotice, dismissAuthNotice } =
+    useCycleData();
   const [authOpen, setAuthOpen] = useState(false);
   const authAvailable = getSupabase() !== null;
 
@@ -39,6 +40,16 @@ export function App() {
 
   return (
     <>
+      {authNotice && (
+        <div role="alert" className="mx-auto mt-4 w-full max-w-md px-4">
+          <div className="flex items-start gap-3 rounded-2xl bg-warning-soft p-4 text-sm text-warning">
+            <p className="flex-1">{authNotice}</p>
+            <button type="button" aria-label="Закрыть" className="-m-1 p-1" onClick={dismissAuthNotice}>
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
       {state.data ? (
         <Home
           data={state.data}
