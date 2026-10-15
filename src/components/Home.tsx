@@ -15,12 +15,13 @@ import { formatDayMonth, formatLong, formatRange, pluralDays } from "@/lib/forma
 import { setDayLog, summarizeLog, type DayLog } from "@/lib/journal";
 import { Calendar } from "./Calendar";
 import { DayLogEditor } from "./DayLogEditor";
+import { DrawingsTab } from "./Drawings";
 import { PairTab } from "./PairTab";
 import { StatusCard } from "./StatusCard";
 import type { SyncStatus } from "./useCycleData";
 import { Button, Card, Disclaimer, Stepper } from "./ui";
 
-type Tab = "today" | "calendar" | "pair" | "settings";
+type Tab = "today" | "calendar" | "pair" | "drawings" | "settings";
 
 export interface PinControl {
   enabled: boolean;
@@ -40,6 +41,7 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: "today", label: "Сегодня", icon: "●" },
   { id: "calendar", label: "Календарь", icon: "▦" },
   { id: "pair", label: "Пара", icon: "♡" },
+  { id: "drawings", label: "Рисунки", icon: "✎" },
   { id: "settings", label: "Настройки", icon: "⚙" },
 ];
 
@@ -205,6 +207,8 @@ export function Home({
         )}
 
         {tab === "pair" && <PairTab userId={account?.userId ?? null} today={today} onSignIn={onSignIn} />}
+
+        {tab === "drawings" && <DrawingsTab userId={account?.userId ?? null} />}
 
         {tab === "settings" && (
           <SettingsTab

@@ -238,3 +238,48 @@ export async function setNoteFlag(
 export async function deleteNote(sb: SupabaseClient, noteId: string): Promise<void> {
   check(await sb.from("shared_notes").delete().eq("id", noteId));
 }
+
+// --- Рисунки ---
+
+export interface SavedDrawing {
+  id: string;
+  authorId: string;
+  drawing: import("@/lib/drawing").Drawing;
+  seenAt: string | null;
+  createdAt: string;
+}
+
+export async function listDrawings(sb: SupabaseClient, linkId: string): Promise<SavedDrawing[]> {
+  const { parseDrawing } = await import("@/lib/drawing");
+  const rows = check(
+    await sb
+      .from("drawings")
+      .select("id, author_id, background, strokes, seen_at, created_at")
+      .eq("link_id", linkId)
+      .order("created_at", { ascending: false })
+      .limit(30),
+  );
+  return (rows ?? []).map((r) => ({
+    id: r.id,
+    authorId: r.author_id,
+    drawing: parseDrawing({ background: r.background, strokes: r.strokes }),
+    seenAt: r.seen_at,
+    createdAt: r.created_at,
+  }));
+}
+
+export async function addDrawing(
+  sb: SupabaseClient,
+  linkId: string,
+  drawing: import("@/lib/drawing").Drawing,
+): Promise<void> {
+  check(await sb.from("drawings").insert({ link_id: linkId, background: drawing.background, strokes: drawing.strokes }));
+}
+
+export async function markDrawingSeen(sb: SupabaseClient, id: string): Promise<void> {
+  check(await sb.from("drawings").update({ seen_at: new Date().toISOString() }).eq("id", id).is("seen_at", null));
+}
+
+export async function deleteDrawing(sb: SupabaseClient, id: string): Promise<void> {
+  check(await sb.from("drawings").delete().eq("id", id));
+}

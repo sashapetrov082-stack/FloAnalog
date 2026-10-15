@@ -100,7 +100,7 @@ export function SharedFeed({
           aria-label="Новая заметка"
           className="min-h-20 rounded-2xl border border-border bg-surface p-3 text-base"
           maxLength={NOTE_MAX}
-          placeholder={role === "owner" ? "Например: «в субботу годовщина»" : `Напишите ${otherName}…`}
+          placeholder={role === "owner" ? "Например: «в субботу годовщина»" : "Написать заметку…"}
           value={text}
           onChange={(e) => setText(e.target.value)}
         />

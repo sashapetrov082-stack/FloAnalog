@@ -169,11 +169,29 @@ do $$ begin
   exception when others then if sqlerrm = 'FAIL 13' then raise; end if; end;
 end $$;
 
+-- 24. Рисунки: партнёр рисует, владелица видит и отмечает просмотренным, но не меняет.
+insert into public.drawings (link_id, strokes) values ((select v from ctx where k='link')::uuid, '[{"c":"#e0557f","s":8,"b":"pen","p":[1,2,3,4]}]');
+do $$ begin
+  begin update public.drawings set seen_at = now(); raise exception 'FAIL 24: автор отметил свой рисунок';
+  exception when others then if sqlerrm like 'FAIL%' then raise; end if; end;
+end $$;
+select pg_temp.logout(); select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+update public.drawings set seen_at = now();
+do $$ begin
+  if (select seen_at from public.drawings) is null then raise exception 'FAIL 24: не отмечен просмотренным'; end if;
+  begin update public.drawings set strokes = '[]'; raise exception 'FAIL 24: чужой рисунок изменён';
+  exception when others then if sqlerrm like 'FAIL%' then raise; end if; end;
+  delete from public.drawings; -- чужой: политика не даст удалить
+  if (select count(*) from public.drawings) <> 1 then raise exception 'FAIL 24: удалён чужой рисунок'; end if;
+end $$;
+select pg_temp.logout(); select pg_temp.login('00000000-0000-0000-0000-00000000000b');
+
 -- 14. Посторонний не видит ни связей, ни заметок и не может писать в чужую пару.
 select pg_temp.logout(); select pg_temp.login('00000000-0000-0000-0000-00000000000c');
 do $$ declare n int; begin
   select count(*) into n from public.shared_notes;  if n <> 0 then raise exception 'FAIL 14: заметки'; end if;
   select count(*) into n from public.partner_links; if n <> 0 then raise exception 'FAIL 14: связи'; end if;
+  select count(*) into n from public.drawings; if n <> 0 then raise exception 'FAIL 14: рисунки'; end if;
   begin
     insert into public.shared_notes (link_id, date, body) values ((select v from ctx where k='link')::uuid, '2026-10-01', 'x');
     raise exception 'FAIL 14';
@@ -188,6 +206,7 @@ do $$ declare n int; begin
   if exists (select 1 from public.get_my_links()) then raise exception 'FAIL 21: отключённая связь в списке'; end if;
   if public.get_partner_view() is not null then raise exception 'FAIL 15: данные видны после отключения'; end if;
   select count(*) into n from public.shared_notes; if n <> 0 then raise exception 'FAIL 15: заметки видны'; end if;
+  select count(*) into n from public.drawings; if n <> 0 then raise exception 'FAIL 15: рисунки видны после отключения'; end if;
 end $$;
 
 -- 16. Просроченный код не работает.
