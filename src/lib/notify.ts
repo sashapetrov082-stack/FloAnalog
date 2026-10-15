@@ -112,7 +112,8 @@ export const TEST_MESSAGE: PushMessage = {
 };
 
 export interface TestResult {
-  reason?: "push-not-configured" | "throttled" | "db-not-ready";
+  reason?: "push-not-configured" | "throttled" | "db-not-ready" | "db-error";
+  detail?: string;
   /** Ошибка при сохранении подписки этого устройства (из браузера). */
   saveError?: string;
   devices?: number;
@@ -138,6 +139,15 @@ export function explainTest(r: TestResult): { ok: boolean; text: string } {
     };
   }
   const errors = r.errors ?? [];
+  if (r.reason === "db-error") {
+    const denied = /42501|permission denied/i.test(r.detail ?? "");
+    return {
+      ok: false,
+      text: denied
+        ? "Серверу не хватает прав к базе: в Vercel в SUPABASE_SERVICE_ROLE_KEY, похоже, указан публичный ключ вместо секретного (service_role). Ошибка: " + r.detail
+        : `Сервер не смог прочитать базу. Ошибка: ${r.detail}`,
+    };
+  }
   if (!r.thisDevice && r.saveError) {
     return { ok: false, text: `Сервер не принял подписку этого устройства: ${r.saveError}` };
   }

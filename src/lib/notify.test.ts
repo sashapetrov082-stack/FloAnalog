@@ -63,6 +63,9 @@ describe("уведомления", () => {
     );
     expect(explainTest({ devices: 1, sent: 1, errors: [], thisDevice: true }).ok).toBe(true);
     expect(explainTest({ reason: "db-not-ready" }).text).toMatch(/20261019000000_push\.sql/);
+    expect(explainTest({ reason: "db-error", detail: "42501: permission denied for table push_subscriptions" }).text).toMatch(
+      /service_role/,
+    );
     expect(explainTest({ devices: 0, sent: 0, errors: [], thisDevice: false, saveError: "boom" }).text).toMatch(/boom/);
   });
 });

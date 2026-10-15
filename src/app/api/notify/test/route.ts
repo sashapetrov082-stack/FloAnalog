@@ -21,8 +21,11 @@ export async function POST(request: Request) {
     .eq("user_id", user.id)
     .eq("endpoint", body?.endpoint ?? "")
     .maybeSingle();
-  // Таблицы нет — не выполнена миграция supabase/migrations/20261019000000_push.sql.
-  if (error) return Response.json({ reason: "db-not-ready" });
+  if (error) {
+    // 42P01 / PGRST205 — таблицы нет (не выполнена миграция); 42501 — нет прав (не тот ключ).
+    const missing = error.code === "42P01" || error.code === "PGRST205";
+    return Response.json({ reason: missing ? "db-not-ready" : "db-error", detail: `${error.code}: ${error.message}` });
+  }
 
   if (!(await claimSend(admin, user.id, "test"))) return Response.json({ reason: "throttled" });
   const result = await deliver(admin, user.id, TEST_MESSAGE);
