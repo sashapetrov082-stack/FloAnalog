@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { compareDates, diffDays, type IsoDate } from "@/lib/cycle/dates";
 import {
   findPeriodAt,
@@ -13,6 +13,8 @@ import { predict, type Phase, type Prediction, type Warning } from "@/lib/cycle/
 import type { GuestData } from "@/lib/guest/store";
 import { formatDayMonth, formatLong, formatRange, pluralDays } from "@/lib/format";
 import { setDayLog, summarizeLog, type DayLog } from "@/lib/journal";
+import { getMyLinks } from "@/lib/pair";
+import { getSupabase } from "@/lib/supabase/client";
 import { Calendar } from "./Calendar";
 import { DayLogEditor } from "./DayLogEditor";
 import { DrawingsTab } from "./Drawings";
@@ -22,6 +24,7 @@ import type { SyncStatus } from "./useCycleData";
 import { Button, Card, Disclaimer, Stepper } from "./ui";
 
 type Tab = "today" | "calendar" | "pair" | "drawings" | "settings";
+type PairRole = "owner" | "partner" | null;
 
 export interface PinControl {
   enabled: boolean;
@@ -96,6 +99,31 @@ export function Home({
     if (start === "pair") sessionStorage.removeItem("start-tab");
     return start === "pair" ? "pair" : "today";
   });
+  // Роль в паре. Партнёру не нужны свой цикл и журнал — у него только «Пара», «Рисунки», «Настройки».
+  const roleKey = account ? `pair-role:${account.userId}` : null;
+  const [pairRole, setPairRole] = useState<PairRole>(() => {
+    if (!roleKey || typeof window === "undefined") return null;
+    const cached = localStorage.getItem(roleKey);
+    return cached === "owner" || cached === "partner" ? cached : null;
+  });
+  const updateRole = useCallback(
+    (role: PairRole) => {
+      setPairRole(role);
+      if (roleKey) {
+        if (role) localStorage.setItem(roleKey, role);
+        else localStorage.removeItem(roleKey);
+      }
+    },
+    [roleKey],
+  );
+  useEffect(() => {
+    const sb = getSupabase();
+    if (!sb || !account) return;
+    getMyLinks(sb).then((links) => updateRole(links[0]?.role ?? null), () => undefined);
+  }, [account?.userId, updateRole]); // eslint-disable-line react-hooks/exhaustive-deps
+  const partnerMode = pairRole === "partner";
+  const visibleTabs = partnerMode ? TABS.filter((t) => t.id !== "today" && t.id !== "calendar") : TABS;
+  const shownTab: Tab = partnerMode && (tab === "today" || tab === "calendar") ? "pair" : tab;
   const [selected, setSelected] = useState<IsoDate | null>(null);
   const [editing, setEditing] = useState<IsoDate | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -127,7 +155,7 @@ export function Home({
   return (
     <>
       <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-4 px-4 pb-28 pt-6">
-        {tab === "today" && (
+        {shownTab === "today" && (
           <>
             {account?.sync === "offline" && (
               <p className="rounded-2xl bg-warning-soft p-3 text-sm text-warning" role="status">
@@ -171,7 +199,7 @@ export function Home({
           </>
         )}
 
-        {tab === "calendar" && (
+        {shownTab === "calendar" && (
           <>
             <Card>
               <Calendar
@@ -206,11 +234,13 @@ export function Home({
           </>
         )}
 
-        {tab === "pair" && <PairTab userId={account?.userId ?? null} today={today} onSignIn={onSignIn} />}
+        {shownTab === "pair" && (
+          <PairTab userId={account?.userId ?? null} today={today} onSignIn={onSignIn} onRole={updateRole} />
+        )}
 
-        {tab === "drawings" && <DrawingsTab userId={account?.userId ?? null} />}
+        {shownTab === "drawings" && <DrawingsTab userId={account?.userId ?? null} />}
 
-        {tab === "settings" && (
+        {shownTab === "settings" && (
           <SettingsTab
             data={data}
             onChange={onChange}
@@ -219,6 +249,7 @@ export function Home({
             account={account}
             onSignIn={onSignIn}
             pin={pin}
+            partnerMode={partnerMode}
           />
         )}
       </main>
@@ -228,14 +259,14 @@ export function Home({
         className="fixed inset-x-0 bottom-0 z-10 border-t border-border bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur"
       >
         <ul className="mx-auto flex max-w-md">
-          {TABS.map((t) => (
+          {visibleTabs.map((t) => (
             <li key={t.id} className="flex-1">
               <button
                 type="button"
-                aria-current={tab === t.id ? "page" : undefined}
+                aria-current={shownTab === t.id ? "page" : undefined}
                 onClick={() => setTab(t.id)}
                 className={`flex w-full flex-col items-center gap-0.5 py-3 text-xs ${
-                  tab === t.id ? "font-semibold text-accent" : "text-muted"
+                  shownTab === t.id ? "font-semibold text-accent" : "text-muted"
                 }`}
               >
                 <span aria-hidden className="text-lg leading-none">
@@ -512,6 +543,7 @@ function SettingsTab({
   account,
   onSignIn,
   pin,
+  partnerMode,
 }: {
   data: GuestData;
   today: IsoDate;
@@ -520,6 +552,7 @@ function SettingsTab({
   account: AccountInfo | null;
   onSignIn: (() => void) | null;
   pin: PinControl;
+  partnerMode: boolean;
 }) {
   const [confirming, setConfirming] = useState(false);
   const set = (patch: Partial<GuestData["settings"]>) => onChange({ ...data, settings: { ...data.settings, ...patch } });
@@ -553,6 +586,7 @@ function SettingsTab({
         )}
       </Card>
 
+      {!partnerMode && (
       <Card className="flex flex-col gap-5">
         <div className="flex flex-col gap-2">
           <p className="text-sm text-muted">Обычная длина цикла — пока отмечено мало циклов</p>
@@ -577,6 +611,7 @@ function SettingsTab({
           />
         </div>
       </Card>
+      )}
 
       <Card className="flex flex-col gap-3">
         <h2 className="text-lg font-semibold">Ваши данные</h2>

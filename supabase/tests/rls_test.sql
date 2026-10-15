@@ -116,10 +116,33 @@ do $$ declare v jsonb; n int; begin
   if v ? 'periods' or v ? 'fertility' or v ? 'day_logs' or v ? 'daily_status' then
     raise exception 'FAIL 9: лишние данные %', v; end if;
 
+  -- 25. Партнёр не может записать или изменить журнал и месячные владелицы.
+  begin
+    insert into public.day_logs (user_id, date, symptoms) values ('00000000-0000-0000-0000-00000000000a', '2026-10-02', '{cramps}');
+    raise exception 'FAIL 25: партнёр записал в журнал владелицы';
+  exception when others then if sqlerrm like 'FAIL%' then raise; end if; end;
+  update public.day_logs set note = 'взлом' where user_id = '00000000-0000-0000-0000-00000000000a';
+  begin
+    insert into public.periods (user_id, start_date) values ('00000000-0000-0000-0000-00000000000a', '2026-10-10');
+    raise exception 'FAIL 25: партнёр добавил месячные владелице';
+  exception when others then if sqlerrm like 'FAIL%' then raise; end if; end;
+  delete from public.periods where user_id = '00000000-0000-0000-0000-00000000000a';
+
   -- 10. Партнёр не может поменять настройки видимости.
   update public.share_settings set symptoms = true;
   if (select symptoms from public.share_settings) then raise exception 'FAIL 10'; end if;
 end $$;
+
+-- Проверяем от имени администратора базы: партнёру чужие строки и так не видны.
+select pg_temp.logout();
+do $$ begin
+  if exists (select 1 from public.day_logs where note = 'взлом') then raise exception 'FAIL 25: журнал изменён'; end if;
+  if (select count(*) from public.periods where user_id = '00000000-0000-0000-0000-00000000000a') <> 1 then
+    raise exception 'FAIL 25: месячные удалены'; end if;
+  if (select count(*) from public.day_logs where user_id = '00000000-0000-0000-0000-00000000000a') <> 1 then
+    raise exception 'FAIL 25: в журнал владелицы добавлена запись'; end if;
+end $$;
+select pg_temp.login('00000000-0000-0000-0000-00000000000b');
 
 -- 11. Владелица включает симптомы: партнёр видит симптомы, но не заметку и не температуру.
 select pg_temp.logout(); select pg_temp.login('00000000-0000-0000-0000-00000000000a');

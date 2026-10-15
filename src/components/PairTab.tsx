@@ -91,10 +91,13 @@ export function PairTab({
   userId,
   today,
   onSignIn,
+  onRole,
 }: {
   userId: string | null;
   today: IsoDate;
   onSignIn: (() => void) | null;
+  /** Роль в паре изменилась (подключились, отключились) — для набора вкладок. */
+  onRole?: (role: "owner" | "partner" | null) => void;
 }) {
   const sb = getSupabase();
   const [profile, setProfile] = useState<PairProfile | null>(null);
@@ -107,11 +110,12 @@ export function PairTab({
       const [p, l] = await Promise.all([getProfile(sb, userId), getMyLinks(sb)]);
       setProfile(p);
       setLinks(l);
+      onRole?.(l[0]?.role ?? null);
       setError(null);
     } catch (e) {
       setError(errorText(e));
     }
-  }, [sb, userId]);
+  }, [sb, userId, onRole]);
 
   useEffect(() => {
     // Загрузка данных пары при открытии вкладки.
