@@ -20,6 +20,11 @@ import { Button, Card, Disclaimer, Stepper } from "./ui";
 
 type Tab = "today" | "calendar" | "settings";
 
+export interface PinControl {
+  enabled: boolean;
+  onSetup: (mode: "enable" | "change" | "disable") => void;
+}
+
 export interface AccountInfo {
   email: string;
   sync: SyncStatus;
@@ -68,6 +73,7 @@ export function Home({
   onReset,
   account,
   onSignIn,
+  pin,
 }: {
   data: GuestData;
   today: IsoDate;
@@ -75,6 +81,7 @@ export function Home({
   onReset: () => void;
   account: AccountInfo | null;
   onSignIn: (() => void) | null;
+  pin: PinControl;
 }) {
   const { periods, settings, dayLogs } = data;
   const [tab, setTab] = useState<Tab>("today");
@@ -194,6 +201,7 @@ export function Home({
             today={today}
             account={account}
             onSignIn={onSignIn}
+            pin={pin}
           />
         )}
       </main>
@@ -486,6 +494,7 @@ function SettingsTab({
   onReset,
   account,
   onSignIn,
+  pin,
 }: {
   data: GuestData;
   today: IsoDate;
@@ -493,6 +502,7 @@ function SettingsTab({
   onReset: () => void;
   account: AccountInfo | null;
   onSignIn: (() => void) | null;
+  pin: PinControl;
 }) {
   const [confirming, setConfirming] = useState(false);
   const set = (patch: Partial<GuestData["settings"]>) => onChange({ ...data, settings: { ...data.settings, ...patch } });
@@ -502,6 +512,29 @@ function SettingsTab({
       <h1 className="text-2xl font-semibold">Настройки</h1>
 
       <AccountCard account={account} onSignIn={onSignIn} />
+
+      <Card className="flex flex-col gap-3">
+        <h2 className="text-lg font-semibold">PIN-код</h2>
+        <p className="text-sm text-muted">
+          {pin.enabled
+            ? "Включён: приложение спрашивает PIN-код при открытии и после минуты в фоне."
+            : "Защитит календарь и журнал, если телефон окажется в чужих руках."}
+        </p>
+        {pin.enabled ? (
+          <>
+            <Button variant="secondary" onClick={() => pin.onSetup("change")}>
+              Изменить PIN-код
+            </Button>
+            <Button variant="ghost" onClick={() => pin.onSetup("disable")}>
+              Выключить PIN-код
+            </Button>
+          </>
+        ) : (
+          <Button variant="secondary" onClick={() => pin.onSetup("enable")}>
+            Включить PIN-код
+          </Button>
+        )}
+      </Card>
 
       <Card className="flex flex-col gap-5">
         <div className="flex flex-col gap-2">
