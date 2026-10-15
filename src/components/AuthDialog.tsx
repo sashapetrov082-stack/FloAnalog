@@ -104,7 +104,15 @@ export function AuthDialog({ onSignedIn, onClose }: { onSignedIn: (user: User) =
               />
               <span>
                 Я согласна на хранение и обработку моих данных о здоровье (цикл, симптомы, заметки) на серверах в ЕС —
-                только для работы приложения. Данные не передаются рекламным сервисам, удалить их можно в любой момент.
+                только для работы приложения — и принимаю{" "}
+                <a href="/terms" target="_blank" className="text-accent underline underline-offset-2">
+                  Пользовательское соглашение
+                </a>
+                . Подробнее в{" "}
+                <a href="/privacy" target="_blank" className="text-accent underline underline-offset-2">
+                  Политике конфиденциальности
+                </a>
+                . Данные не передаются рекламным сервисам, удалить их можно в любой момент.
               </span>
             </label>
             <Button type="submit" disabled={!emailValid || !consent || busy}>

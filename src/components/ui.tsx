@@ -74,8 +74,16 @@ export function Stepper({
 
 export function Disclaimer() {
   return (
-    <p className="text-sm text-muted">
-      Прогноз приблизительный. Приложение не является методом контрацепции и не ставит диагнозов.
-    </p>
+    <div className="flex flex-col gap-2 text-sm text-muted">
+      <p>Прогноз приблизительный. Приложение не является методом контрацепции и не ставит диагнозов.</p>
+      <p className="flex flex-wrap gap-x-4 gap-y-1">
+        <a href="/privacy" className="underline underline-offset-2 hover:text-foreground">
+          Конфиденциальность
+        </a>
+        <a href="/terms" className="underline underline-offset-2 hover:text-foreground">
+          Соглашение
+        </a>
+      </p>
+    </div>
   );
 }
