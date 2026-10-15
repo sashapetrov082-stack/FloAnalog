@@ -25,6 +25,8 @@ import {
   type ShareSettings,
 } from "@/lib/pair";
 import { getSupabase } from "@/lib/supabase/client";
+import { describeStatus } from "@/lib/status";
+import { SharedFeed } from "./SharedFeed";
 import { Button, Card } from "./ui";
 
 const phaseLabel: Record<Phase, string> = {
@@ -48,8 +50,10 @@ const shareLabels: Record<ShareKey, string> = {
   prediction: "Фаза и прогноз месячных",
   fertility: "Фертильные дни и овуляция",
   periods: "Даты месячных",
-  mood: "Настроение",
-  symptoms: "Симптомы",
+  daily_status: "Статус дня: энергия, настроение, что нужно",
+  libido: "Либидо в статусе дня",
+  mood: "Настроение из журнала",
+  symptoms: "Симптомы из журнала",
 };
 
 function errorText(e: unknown): string {
@@ -195,9 +199,9 @@ export function PairTab({
   }
 
   return link.role === "owner" ? (
-    <OwnerActive link={link} onChanged={reload} />
+    <OwnerActive link={link} meId={userId} today={today} onChanged={reload} />
   ) : (
-    <PartnerActive link={link} today={today} onChanged={reload} />
+    <PartnerActive link={link} meId={userId} today={today} onChanged={reload} />
   );
 }
 
@@ -422,7 +426,17 @@ function NoLink({ onChanged }: { onChanged: () => void }) {
   );
 }
 
-function OwnerActive({ link, onChanged }: { link: PairLink; onChanged: () => void }) {
+function OwnerActive({
+  link,
+  meId,
+  today,
+  onChanged,
+}: {
+  link: PairLink;
+  meId: string;
+  today: IsoDate;
+  onChanged: () => void;
+}) {
   const sb = getSupabase()!;
   const [settings, setSettings] = useState<ShareSettings | null>(null);
   const [lastView, setLastView] = useState<string | null>(null);
@@ -470,6 +484,8 @@ function OwnerActive({ link, onChanged }: { link: PairLink; onChanged: () => voi
         {error && <p className="text-sm text-warning">{error}</p>}
       </Card>
 
+      <SharedFeed linkId={link.linkId} meId={meId} role="owner" otherName={name} today={today} />
+
       <Card className="flex flex-col gap-3">
         <Action
           label="Отключить партнёра"
@@ -483,7 +499,17 @@ function OwnerActive({ link, onChanged }: { link: PairLink; onChanged: () => voi
   );
 }
 
-function PartnerActive({ link, today, onChanged }: { link: PairLink; today: IsoDate; onChanged: () => void }) {
+function PartnerActive({
+  link,
+  meId,
+  today,
+  onChanged,
+}: {
+  link: PairLink;
+  meId: string;
+  today: IsoDate;
+  onChanged: () => void;
+}) {
   const sb = getSupabase()!;
   const [view, setView] = useState<PartnerView | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
@@ -507,7 +533,9 @@ function PartnerActive({ link, today, onChanged }: { link: PairLink; today: IsoD
   const info = view?.prediction ? partnerCycleInfo(view.prediction, view.fertility ?? null, today) : null;
   const recentLogs = (view?.dayLogs ?? []).filter((l) => l.date >= addDays(today, -6) && l.date <= today).reverse();
   const lastPeriods = (view?.periods ?? []).slice(-3).reverse();
-  const nothingShared = view && !view.prediction && !view.periods && !view.dayLogs;
+  const nothingShared = view && !view.prediction && !view.periods && !view.dayLogs && !view.dailyStatus;
+  const todayStatus = view?.dailyStatus?.find((d) => d.date === today);
+  const statusLines = todayStatus ? describeStatus(todayStatus) : [];
 
   return (
     <>
@@ -550,6 +578,21 @@ function PartnerActive({ link, today, onChanged }: { link: PairLink; today: IsoD
         </Card>
       )}
 
+      {view?.dailyStatus && (
+        <Card className="flex flex-col gap-2">
+          <h2 className="text-lg font-semibold">Статус на сегодня</h2>
+          {statusLines.length > 0 ? (
+            <ul className="flex flex-col gap-1 text-base">
+              {statusLines.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-muted">Сегодня статус ещё не отмечен.</p>
+          )}
+        </Card>
+      )}
+
       {lastPeriods.length > 0 && (
         <Card className="flex flex-col gap-2">
           <h2 className="text-lg font-semibold">Последние месячные</h2>
@@ -584,6 +627,8 @@ function PartnerActive({ link, today, onChanged }: { link: PairLink; today: IsoD
           <p className="text-sm text-muted">Пока для вас ничего не открыто.</p>
         </Card>
       )}
+
+      {view && <SharedFeed linkId={link.linkId} meId={meId} role="partner" otherName={name} today={today} />}
 
       <Card className="flex flex-col gap-3">
         <Button variant="secondary" onClick={load}>

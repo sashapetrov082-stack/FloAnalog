@@ -16,6 +16,7 @@ import { setDayLog, summarizeLog, type DayLog } from "@/lib/journal";
 import { Calendar } from "./Calendar";
 import { DayLogEditor } from "./DayLogEditor";
 import { PairTab } from "./PairTab";
+import { StatusCard } from "./StatusCard";
 import type { SyncStatus } from "./useCycleData";
 import { Button, Card, Disclaimer, Stepper } from "./ui";
 
@@ -153,6 +154,8 @@ export function Home({
             ) : (
               <Button onClick={() => markStart(today)}>Месячные начались сегодня</Button>
             )}
+
+            {account && periods.length > 0 && <StatusCard userId={account.userId} today={today} />}
 
             <Card className="flex flex-col gap-3">
               <h2 className="text-lg font-semibold">Как вы сегодня?</h2>

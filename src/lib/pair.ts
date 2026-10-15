@@ -5,6 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { IsoDate } from "@/lib/cycle/dates";
 import type { PartnerFertility, PartnerPrediction } from "@/lib/cycle/partner";
 import type { Prediction } from "@/lib/cycle/predict";
+import type { DayStatus } from "@/lib/status";
 
 function check<T>(result: { data: T; error: { message: string } | null }): T {
   if (result.error) throw new Error(result.error.message);
@@ -72,7 +73,7 @@ export async function revokeLink(sb: SupabaseClient, linkId: string): Promise<vo
   check(await sb.rpc("revoke_partner_link", { p_link_id: linkId }));
 }
 
-export const SHARE_KEYS = ["prediction", "fertility", "periods", "mood", "symptoms"] as const;
+export const SHARE_KEYS = ["prediction", "fertility", "periods", "daily_status", "libido", "mood", "symptoms"] as const;
 export type ShareKey = (typeof SHARE_KEYS)[number];
 export type ShareSettings = Record<ShareKey, boolean>;
 
@@ -110,6 +111,7 @@ export interface PartnerView {
   fertility?: PartnerFertility;
   periods?: { start: IsoDate; end: IsoDate | null }[];
   dayLogs?: { date: IsoDate; moods?: string[]; symptoms?: string[] }[];
+  dailyStatus?: ({ date: IsoDate } & Partial<DayStatus>)[];
 }
 
 export async function getPartnerView(sb: SupabaseClient, from: IsoDate, to: IsoDate): Promise<PartnerView | null> {
@@ -123,6 +125,7 @@ export async function getPartnerView(sb: SupabaseClient, from: IsoDate, to: IsoD
     fertility: v.fertility ?? undefined,
     periods: v.periods ?? undefined,
     dayLogs: v.day_logs ?? undefined,
+    dailyStatus: v.daily_status ?? undefined,
   };
 }
 
@@ -158,4 +161,80 @@ export async function savePredictionSnapshot(
       .from("predictions")
       .upsert({ user_id: userId, ...row, updated_at: new Date().toISOString() }, { onConflict: "user_id" }),
   );
+}
+
+// --- Статус дня владелицы ---
+
+export async function getDayStatus(sb: SupabaseClient, userId: string, date: IsoDate): Promise<DayStatus | null> {
+  const r = check(
+    await sb.from("daily_status").select("energy, mood, needs, libido").eq("user_id", userId).eq("date", date).maybeSingle(),
+  );
+  return r ? { energy: r.energy, mood: r.mood, needs: r.needs ?? [], libido: r.libido } : null;
+}
+
+export async function saveDayStatus(sb: SupabaseClient, userId: string, date: IsoDate, status: DayStatus | null) {
+  if (!status) {
+    check(await sb.from("daily_status").delete().eq("user_id", userId).eq("date", date));
+    return;
+  }
+  check(
+    await sb
+      .from("daily_status")
+      .upsert({ user_id: userId, date, ...status, updated_at: new Date().toISOString() }, { onConflict: "user_id,date" }),
+  );
+}
+
+// --- Общая лента пары ---
+
+export interface SharedNote {
+  id: string;
+  authorId: string;
+  date: IsoDate;
+  kind: "note" | "request";
+  body: string;
+  doneAt: string | null;
+  heartedAt: string | null;
+  createdAt: string;
+}
+
+export async function listNotes(sb: SupabaseClient, linkId: string): Promise<SharedNote[]> {
+  const rows = check(
+    await sb
+      .from("shared_notes")
+      .select("id, author_id, date, kind, body, done_at, hearted_at, created_at")
+      .eq("link_id", linkId)
+      .order("created_at", { ascending: false })
+      .limit(50),
+  );
+  return (rows ?? []).map((r) => ({
+    id: r.id,
+    authorId: r.author_id,
+    date: r.date,
+    kind: r.kind,
+    body: r.body,
+    doneAt: r.done_at,
+    heartedAt: r.hearted_at,
+    createdAt: r.created_at,
+  }));
+}
+
+export async function addNote(
+  sb: SupabaseClient,
+  linkId: string,
+  note: { date: IsoDate; kind: "note" | "request"; body: string },
+): Promise<void> {
+  check(await sb.from("shared_notes").insert({ link_id: linkId, ...note }));
+}
+
+export async function setNoteFlag(
+  sb: SupabaseClient,
+  noteId: string,
+  flag: "done_at" | "hearted_at",
+  on: boolean,
+): Promise<void> {
+  check(await sb.from("shared_notes").update({ [flag]: on ? new Date().toISOString() : null }).eq("id", noteId));
+}
+
+export async function deleteNote(sb: SupabaseClient, noteId: string): Promise<void> {
+  check(await sb.from("shared_notes").delete().eq("id", noteId));
 }

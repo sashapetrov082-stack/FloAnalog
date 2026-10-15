@@ -27,7 +27,7 @@ grant all on ctx to authenticated;
 select pg_temp.login('00000000-0000-0000-0000-00000000000a');
 insert into public.periods (start_date, end_date) values ('2026-09-20', '2026-09-24');
 insert into public.day_logs (date, symptoms, moods, note, temperature) values ('2026-10-01', '{headache}', '{calm}', 'секрет', 36.6);
-insert into public.daily_status (date, energy, needs) values ('2026-10-01', 2, '{care}');
+insert into public.daily_status (date, energy, needs, libido) values ('2026-10-01', 2, '{care}', 3);
 insert into public.predictions (computed_for, cycle_day, phase, next_period_date, next_period_earliest,
   next_period_latest, ovulation_date, fertile_start, fertile_end, last_period_start, cycle_length, period_length)
 values ('2026-10-04', 15, 'ovulation', '2026-10-18', '2026-10-17', '2026-10-19', '2026-10-04', '2026-09-29', '2026-10-05',
@@ -131,6 +131,16 @@ do $$ declare v jsonb; begin
   if v::text like '%секрет%' or v::text like '%36.6%' or v->'day_logs'->0 ? 'moods' then
     raise exception 'FAIL 11: утекли лишние поля %', v; end if;
   if v->'daily_status'->0->>'energy' <> '2' then raise exception 'FAIL 11: нет статуса дня'; end if;
+  -- 22. Либидо скрыто без отдельного разрешения.
+  if v->'daily_status'->0 ? 'libido' then raise exception 'FAIL 22: либидо видно без разрешения'; end if;
+end $$;
+
+select pg_temp.logout(); select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+update public.share_settings set libido = true;
+select pg_temp.logout(); select pg_temp.login('00000000-0000-0000-0000-00000000000b');
+do $$ begin
+  if public.get_partner_view('2026-09-01', '2026-10-31')->'daily_status'->0->>'libido' <> '3' then
+    raise exception 'FAIL 22: либидо не видно после разрешения'; end if;
 end $$;
 
 -- 12. Каждый просмотр пишется в журнал, журнал видит только владелица.
@@ -148,6 +158,11 @@ values ((select v from ctx where k='link')::uuid, '2026-10-01', 'request', 'пр
 select pg_temp.logout(); select pg_temp.login('00000000-0000-0000-0000-00000000000b');
 insert into public.shared_notes (link_id, date, body) values ((select v from ctx where k='link')::uuid, '2026-10-01', 'в субботу годовщина');
 update public.shared_notes set done_at = now() where kind = 'request';
+-- 23. Партнёр может поставить ❤️ на заметку владелицы.
+update public.shared_notes set hearted_at = now() where kind = 'request';
+do $$ begin
+  if (select hearted_at from public.shared_notes where kind = 'request') is null then raise exception 'FAIL 23: реакция не сохранилась'; end if;
+end $$;
 do $$ begin
   if (select done_at from public.shared_notes where kind = 'request') is null then raise exception 'FAIL 13: не отмечено'; end if;
   begin update public.shared_notes set body = 'другое' where kind = 'request'; raise exception 'FAIL 13';
