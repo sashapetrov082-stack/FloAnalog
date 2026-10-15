@@ -62,5 +62,7 @@ describe("уведомления", () => {
       /web\.push\.apple\.com/,
     );
     expect(explainTest({ devices: 1, sent: 1, errors: [], thisDevice: true }).ok).toBe(true);
+    expect(explainTest({ reason: "db-not-ready" }).text).toMatch(/20261019000000_push\.sql/);
+    expect(explainTest({ devices: 0, sent: 0, errors: [], thisDevice: false, saveError: "boom" }).text).toMatch(/boom/);
   });
 });

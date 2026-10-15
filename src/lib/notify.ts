@@ -112,7 +112,9 @@ export const TEST_MESSAGE: PushMessage = {
 };
 
 export interface TestResult {
-  reason?: "push-not-configured" | "throttled";
+  reason?: "push-not-configured" | "throttled" | "db-not-ready";
+  /** Ошибка при сохранении подписки этого устройства (из браузера). */
+  saveError?: string;
   devices?: number;
   sent?: number;
   errors?: number[];
@@ -129,7 +131,16 @@ export function explainTest(r: TestResult): { ok: boolean; text: string } {
     };
   }
   if (r.reason === "throttled") return { ok: false, text: "Подождите полминуты и попробуйте ещё раз." };
+  if (r.reason === "db-not-ready") {
+    return {
+      ok: false,
+      text: "В базе нет таблицы для уведомлений. Выполните в Supabase → SQL Editor файл supabase/migrations/20261019000000_push.sql.",
+    };
+  }
   const errors = r.errors ?? [];
+  if (!r.thisDevice && r.saveError) {
+    return { ok: false, text: `Сервер не принял подписку этого устройства: ${r.saveError}` };
+  }
   if (!r.thisDevice) {
     return {
       ok: false,

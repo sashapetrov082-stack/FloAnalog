@@ -92,7 +92,8 @@ export async function notifyPartner(sb: SupabaseClient, event: NotifyEvent): Pro
 export async function testPush(sb: SupabaseClient): Promise<TestResult> {
   const { data } = await sb.auth.getSession();
   const token = data.session?.access_token;
-  await resyncPush(sb).catch(() => undefined);
+  let saveError: string | undefined;
+  await resyncPush(sb).catch((e: unknown) => (saveError = e instanceof Error ? e.message : String(e)));
   const registration = await navigator.serviceWorker.getRegistration();
   const subscription = await registration?.pushManager.getSubscription();
   const response = await fetch("/api/notify/test", {
@@ -101,5 +102,5 @@ export async function testPush(sb: SupabaseClient): Promise<TestResult> {
     body: JSON.stringify({ endpoint: subscription?.endpoint ?? null }),
   });
   if (!response.ok) throw new Error(String(response.status));
-  return response.json();
+  return { ...(await response.json()), saveError };
 }

@@ -15,12 +15,14 @@ export async function POST(request: Request) {
   if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
 
   const body = (await request.json().catch(() => null)) as { endpoint?: string } | null;
-  const { data: own } = await admin
+  const { data: own, error } = await admin
     .from("push_subscriptions")
     .select("endpoint")
     .eq("user_id", user.id)
     .eq("endpoint", body?.endpoint ?? "")
     .maybeSingle();
+  // Таблицы нет — не выполнена миграция supabase/migrations/20261019000000_push.sql.
+  if (error) return Response.json({ reason: "db-not-ready" });
 
   if (!(await claimSend(admin, user.id, "test"))) return Response.json({ reason: "throttled" });
   const result = await deliver(admin, user.id, TEST_MESSAGE);
