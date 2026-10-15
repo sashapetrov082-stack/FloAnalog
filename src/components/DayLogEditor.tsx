@@ -8,7 +8,10 @@ import {
   FLOW_LEVELS,
   MOODS,
   NOTE_MAX_LENGTH,
+  OVULATION_TESTS,
   SYMPTOM_GROUPS,
+  TEMPERATURE_MAX,
+  TEMPERATURE_MIN,
   toggle,
   type DayLog,
   type Option,
@@ -61,13 +64,17 @@ export function DayLogEditor({
   log,
   onChange,
   onClose,
+  conception = false,
 }: {
   date: IsoDate;
   log: DayLog | undefined;
   onChange: (log: DayLog) => void;
   onClose: () => void;
+  /** Режим зачатия: показать температуру и тест на овуляцию первыми. */
+  conception?: boolean;
 }) {
   const [draft, setDraft] = useState<DayLog>(() => log ?? emptyLog());
+  const showConception = conception || draft.temperature != null || !!draft.ovulationTest;
 
   // Закрытие по Esc и блокировка прокрутки фона.
   useEffect(() => {
@@ -99,6 +106,26 @@ export function DayLogEditor({
             ✕
           </Button>
         </header>
+
+        {showConception && (
+          <>
+            <TemperatureField value={draft.temperature ?? null} onChange={(temperature) => update({ temperature })} />
+            <fieldset className="flex flex-col gap-3">
+              <legend className="mb-3 text-base font-semibold">Тест на овуляцию</legend>
+              <div className="flex flex-wrap gap-2">
+                {OVULATION_TESTS.map((t) => (
+                  <Chip
+                    key={t.id}
+                    selected={draft.ovulationTest === t.id}
+                    onClick={() => update({ ovulationTest: draft.ovulationTest === t.id ? null : t.id })}
+                  >
+                    {t.label}
+                  </Chip>
+                ))}
+              </div>
+            </fieldset>
+          </>
+        )}
 
         <fieldset className="flex flex-col gap-3">
           <legend className="mb-3 text-base font-semibold">Месячные</legend>
@@ -152,5 +179,37 @@ export function DayLogEditor({
         </div>
       </div>
     </div>
+  );
+}
+
+/** Базальная температура: можно вводить через запятую или точку. Пустое поле — удалить. */
+function TemperatureField({ value, onChange }: { value: number | null; onChange: (t: number | null) => void }) {
+  const [text, setText] = useState(() => (value == null ? "" : value.toFixed(2).replace(".", ",")));
+  const parsed = Number(text.trim().replace(",", "."));
+  const valid = text.trim() === "" || (Number.isFinite(parsed) && parsed >= TEMPERATURE_MIN && parsed <= TEMPERATURE_MAX);
+  return (
+    <label className="flex flex-col gap-2">
+      <span className="text-base font-semibold">Базальная температура, °C</span>
+      <input
+        type="text"
+        inputMode="decimal"
+        placeholder="например, 36,55"
+        value={text}
+        onChange={(e) => {
+          const next = e.target.value.replace(/[^\d.,]/g, "").slice(0, 5);
+          setText(next);
+          const n = Number(next.trim().replace(",", "."));
+          if (next.trim() === "") onChange(null);
+          else if (Number.isFinite(n) && n >= TEMPERATURE_MIN && n <= TEMPERATURE_MAX) onChange(Math.round(n * 100) / 100);
+        }}
+        aria-invalid={!valid}
+        className="w-40 rounded-2xl border border-border bg-surface px-4 py-3 text-lg tabular-nums"
+      />
+      <span className={`text-sm ${valid ? "text-muted" : "text-warning"}`}>
+        {valid
+          ? "Утром, сразу после сна, до того как встать, — в одно и то же время."
+          : `Введите значение от ${TEMPERATURE_MIN} до ${String(TEMPERATURE_MAX).replace(".", ",")}`}
+      </span>
+    </label>
   );
 }

@@ -3,7 +3,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { GuestData } from "@/lib/guest/store";
-import { parseGuestData } from "@/lib/guest/store";
+import { parseGuestData, parseTemperature } from "@/lib/guest/store";
 import type { DayLogs } from "@/lib/journal";
 import type { SyncOps } from "./diff";
 
@@ -21,18 +21,34 @@ function rows<T>(result: { data: T | null; error: { message: string } | null }):
 export async function fetchAccountData(sb: SupabaseClient, userId: string): Promise<GuestData> {
   // MVP: одного запроса хватает на годы записей (лимит сервера — 1000 строк на запрос).
   const [profile, periods, logs] = await Promise.all([
-    sb.from("profiles").select("avg_cycle_length, avg_period_length").eq("id", userId).single(),
+    sb.from("profiles").select("avg_cycle_length, avg_period_length, mode").eq("id", userId).single(),
     sb.from("periods").select("start_date, end_date").eq("user_id", userId).order("start_date"),
-    sb.from("day_logs").select("date, flow, symptoms, moods, note").eq("user_id", userId).order("date"),
+    sb
+      .from("day_logs")
+      .select("date, flow, symptoms, moods, note, temperature, ovulation_test")
+      .eq("user_id", userId)
+      .order("date"),
   ]);
   const p = rows(profile);
   const dayLogs: DayLogs = {};
   for (const l of rows(logs)) {
-    dayLogs[l.date] = { flow: l.flow, symptoms: l.symptoms ?? [], moods: l.moods ?? [], note: l.note ?? "" };
+    dayLogs[l.date] = {
+      flow: l.flow,
+      symptoms: l.symptoms ?? [],
+      moods: l.moods ?? [],
+      note: l.note ?? "",
+      // numeric из Postgres приходит строкой.
+      temperature: parseTemperature(l.temperature),
+      ovulationTest: l.ovulation_test ?? null,
+    };
   }
   const data = parseGuestData({
     version: 2,
-    settings: { cycleLength: p.avg_cycle_length, periodLength: p.avg_period_length },
+    settings: {
+      cycleLength: p.avg_cycle_length,
+      periodLength: p.avg_period_length,
+      mode: p.mode === "conception" ? "conception" : "cycle",
+    },
     periods: rows(periods).map((r) => ({ start: r.start_date, end: r.end_date })),
     dayLogs,
   });
@@ -45,7 +61,11 @@ export async function pushOps(sb: SupabaseClient, userId: string, ops: SyncOps):
     check(
       await sb
         .from("profiles")
-        .update({ avg_cycle_length: ops.settings.cycleLength, avg_period_length: ops.settings.periodLength })
+        .update({
+          avg_cycle_length: ops.settings.cycleLength,
+          avg_period_length: ops.settings.periodLength,
+          mode: ops.settings.mode ?? "cycle",
+        })
         .eq("id", userId),
     );
   }
@@ -74,6 +94,8 @@ export async function pushOps(sb: SupabaseClient, userId: string, ops: SyncOps):
           symptoms: l.symptoms,
           moods: l.moods,
           note: l.note || null,
+          temperature: l.temperature ?? null,
+          ovulation_test: l.ovulationTest ?? null,
           updated_at: new Date().toISOString(),
         })),
         { onConflict: "user_id,date" },

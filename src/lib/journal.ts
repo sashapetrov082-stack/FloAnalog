@@ -4,13 +4,28 @@
 import type { IsoDate } from "@/lib/cycle/dates";
 
 export type FlowLevel = "spotting" | "light" | "medium" | "heavy";
+export type OvulationTest = "negative" | "positive" | "peak";
 
 export interface DayLog {
   flow?: FlowLevel | null;
   symptoms: string[];
   moods: string[];
   note?: string;
+  /** Базальная температура, °C. Партнёру не показывается никогда. */
+  temperature?: number | null;
+  /** Тест на овуляцию (ЛГ). Партнёру не показывается никогда. */
+  ovulationTest?: OvulationTest | null;
 }
+
+/** Допустимый диапазон базальной температуры при вводе. */
+export const TEMPERATURE_MIN = 35;
+export const TEMPERATURE_MAX = 38.5;
+
+export const OVULATION_TESTS: { id: OvulationTest; label: string }[] = [
+  { id: "negative", label: "Отрицательный" },
+  { id: "positive", label: "Положительный" },
+  { id: "peak", label: "Пик" },
+];
 
 export type DayLogs = Record<IsoDate, DayLog>;
 
@@ -104,6 +119,17 @@ const labels = new Map<string, string>([
   ...FLOW_LEVELS.map((o) => [o.id, o.label] as const),
 ]);
 
+const testLabels: Record<OvulationTest, string> = {
+  negative: "Тест на овуляцию: отрицательный",
+  positive: "Тест на овуляцию: положительный",
+  peak: "Тест на овуляцию: пик",
+};
+
+/** «36,72 °C» */
+export function formatTemperature(t: number): string {
+  return `${t.toFixed(2).replace(".", ",")} °C`;
+}
+
 export function optionLabel(id: string): string {
   return labels.get(id) ?? id;
 }
@@ -113,7 +139,14 @@ export function emptyLog(): DayLog {
 }
 
 export function isEmptyLog(log: DayLog): boolean {
-  return !log.flow && log.symptoms.length === 0 && log.moods.length === 0 && !log.note?.trim();
+  return (
+    !log.flow &&
+    log.symptoms.length === 0 &&
+    log.moods.length === 0 &&
+    !log.note?.trim() &&
+    log.temperature == null &&
+    !log.ovulationTest
+  );
 }
 
 /** Добавляет значение в список или убирает его оттуда. */
@@ -131,5 +164,9 @@ export function setDayLog(logs: DayLogs, date: IsoDate, log: DayLog): DayLogs {
 
 /** Короткое описание дня: «Умеренные · Спазмы внизу живота · Усталость». */
 export function summarizeLog(log: DayLog): string[] {
-  return [...(log.flow ? [log.flow] : []), ...log.symptoms, ...log.moods].map(optionLabel);
+  return [
+    ...[...(log.flow ? [log.flow] : []), ...log.symptoms, ...log.moods].map(optionLabel),
+    ...(log.temperature != null ? [formatTemperature(log.temperature)] : []),
+    ...(log.ovulationTest ? [testLabels[log.ovulationTest]] : []),
+  ];
 }

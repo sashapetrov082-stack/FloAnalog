@@ -18,6 +18,7 @@ import { exportContraception } from "@/lib/contraception";
 import { getMyLinks } from "@/lib/pair";
 import { getSupabase } from "@/lib/supabase/client";
 import { Calendar } from "./Calendar";
+import { ConceptionCard } from "./Conception";
 import { ContraceptionSettingsCard, ContraceptionToday, useContraception, type ContraceptionState } from "./Contraception";
 import { DayLogEditor } from "./DayLogEditor";
 import { ImportDialog } from "./ImportDialog";
@@ -148,6 +149,7 @@ export function Home({
     [hormonal, contraception.config, today],
   );
   const [reportOpen, setReportOpen] = useState(false);
+  const conception = settings.mode === "conception";
   const [selected, setSelected] = useState<IsoDate | null>(null);
   const [editing, setEditing] = useState<IsoDate | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -203,6 +205,16 @@ export function Home({
             </header>
 
             {!hormonal && <CycleCard prediction={prediction} today={today} />}
+
+            {conception && prediction && (
+              <ConceptionCard
+                prediction={prediction}
+                dayLogs={dayLogs}
+                today={today}
+                contraceptionOn={!!contraception.config && contraception.config.method !== "none"}
+                onLog={() => setEditing(today)}
+              />
+            )}
 
             <ContraceptionToday state={contraception} today={today} />
 
@@ -325,6 +337,7 @@ export function Home({
           key={editing}
           date={editing}
           log={dayLogs[editing]}
+          conception={conception}
           onChange={(log) => saveLog(editing, log)}
           onClose={() => setEditing(null)}
         />
@@ -639,6 +652,36 @@ function SettingsTab({
           </Button>
         )}
       </Card>
+
+      {!partnerMode && (
+        <Card className="flex flex-col gap-3">
+          <h2 className="text-lg font-semibold">Цель</h2>
+          <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Цель">
+            {(
+              [
+                ["cycle", "Отслеживать цикл"],
+                ["conception", "Хочу забеременеть"],
+              ] as const
+            ).map(([mode, label]) => (
+              <Button
+                key={mode}
+                role="radio"
+                aria-checked={(data.settings.mode ?? "cycle") === mode}
+                variant={(data.settings.mode ?? "cycle") === mode ? "primary" : "secondary"}
+                className="px-4"
+                onClick={() => set({ mode })}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
+          <p className="text-sm text-muted">
+            {data.settings.mode === "conception"
+              ? "На вкладке «Сегодня» — фертильность на сегодня и график базальной температуры. Температура и тесты на овуляцию партнёру не видны никогда."
+              : "В режиме зачатия появятся фертильность на сегодня, базальная температура и тесты на овуляцию."}
+          </p>
+        </Card>
+      )}
 
       {!partnerMode && (
       <Card className="flex flex-col gap-5">

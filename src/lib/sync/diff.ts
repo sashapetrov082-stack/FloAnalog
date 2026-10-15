@@ -16,7 +16,14 @@ export interface SyncOps {
 
 function sameLog(a: DayLog, b: DayLog): boolean {
   const norm = (l: DayLog) =>
-    JSON.stringify([l.flow ?? null, [...l.symptoms].sort(), [...l.moods].sort(), l.note ?? ""]);
+    JSON.stringify([
+      l.flow ?? null,
+      [...l.symptoms].sort(),
+      [...l.moods].sort(),
+      l.note ?? "",
+      l.temperature ?? null,
+      l.ovulationTest ?? null,
+    ]);
   return norm(a) === norm(b);
 }
 
@@ -29,7 +36,8 @@ export function diffData(prev: GuestData | null, next: GuestData): SyncOps {
   const settingsChanged =
     !prev ||
     prev.settings.cycleLength !== next.settings.cycleLength ||
-    prev.settings.periodLength !== next.settings.periodLength;
+    prev.settings.periodLength !== next.settings.periodLength ||
+    (prev.settings.mode ?? "cycle") !== (next.settings.mode ?? "cycle");
 
   return {
     settings: settingsChanged ? next.settings : null,

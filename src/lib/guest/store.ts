@@ -3,11 +3,15 @@
 
 import type { Period } from "@/lib/cycle/predict";
 import { assertIsoDate } from "@/lib/cycle/dates";
-import type { DayLog, DayLogs, FlowLevel } from "@/lib/journal";
+import type { DayLog, DayLogs, FlowLevel, OvulationTest } from "@/lib/journal";
+
+export type TrackingMode = "cycle" | "conception";
 
 export interface GuestSettings {
   cycleLength: number;
   periodLength: number;
+  /** Цель: просто отслеживать цикл или зачатие. Нет поля — «cycle». */
+  mode?: TrackingMode;
 }
 
 export interface GuestData {
@@ -46,6 +50,13 @@ async function withStore<T>(mode: IDBTransactionMode, fn: (store: IDBObjectStore
 }
 
 const FLOW_LEVELS: FlowLevel[] = ["spotting", "light", "medium", "heavy"];
+const OVULATION_TESTS: OvulationTest[] = ["negative", "positive", "peak"];
+
+/** Температура из хранилища: число 34–43 (как ограничение в базе), два знака после запятой. */
+export function parseTemperature(value: unknown): number | null {
+  const n = typeof value === "string" ? Number(value) : value;
+  return typeof n === "number" && Number.isFinite(n) && n >= 34 && n <= 43 ? Math.round(n * 100) / 100 : null;
+}
 
 function stringList(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((x): x is string => typeof x === "string") : [];
@@ -62,6 +73,8 @@ function parseDayLogs(raw: unknown): DayLogs {
       symptoms: stringList(log.symptoms),
       moods: stringList(log.moods),
       note: typeof log.note === "string" ? log.note : "",
+      temperature: parseTemperature(log.temperature),
+      ovulationTest: OVULATION_TESTS.includes(log.ovulationTest as OvulationTest) ? log.ovulationTest : null,
     };
   }
   return logs;
@@ -84,7 +97,8 @@ export function parseGuestData(raw: unknown): GuestData | null {
       if (p.end) assertIsoDate(p.end);
       return { start: p.start, end: p.end ?? null };
     });
-    return { version: 2, settings: { cycleLength, periodLength }, periods, dayLogs: parseDayLogs(data.dayLogs) };
+    const mode: TrackingMode = data.settings.mode === "conception" ? "conception" : "cycle";
+    return { version: 2, settings: { cycleLength, periodLength, mode }, periods, dayLogs: parseDayLogs(data.dayLogs) };
   } catch {
     return null;
   }
