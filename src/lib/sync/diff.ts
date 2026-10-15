@@ -4,6 +4,7 @@
 import { diffDays, type IsoDate } from "@/lib/cycle/dates";
 import type { Period } from "@/lib/cycle/predict";
 import type { GuestData, GuestSettings } from "@/lib/guest/store";
+import type { Habit } from "@/lib/habits";
 import type { DayLog } from "@/lib/journal";
 
 export interface SyncOps {
@@ -12,7 +13,20 @@ export interface SyncOps {
   deletePeriodStarts: IsoDate[];
   upsertLogs: [IsoDate, DayLog][];
   deleteLogDates: IsoDate[];
+  upsertHabits: Habit[];
+  deleteHabitIds: string[];
+  /** [id привычки, дата] */
+  addChecks: [string, IsoDate][];
+  removeChecks: [string, IsoDate][];
 }
+
+function checkPairs(data: GuestData | null): Set<string> {
+  const pairs = new Set<string>();
+  for (const [date, ids] of Object.entries(data?.habitChecks ?? {})) for (const id of ids) pairs.add(`${id}|${date}`);
+  return pairs;
+}
+
+const toPair = (key: string) => key.split("|") as [string, IsoDate];
 
 function sameLog(a: DayLog, b: DayLog): boolean {
   const norm = (l: DayLog) =>
@@ -40,7 +54,19 @@ export function diffData(prev: GuestData | null, next: GuestData): SyncOps {
     (prev.settings.mode ?? "cycle") !== (next.settings.mode ?? "cycle") ||
     (prev.settings.pregnancyLmp ?? null) !== (next.settings.pregnancyLmp ?? null);
 
+  const prevHabits = new Map((prev?.habits ?? []).map((h) => [h.id, h]));
+  const nextHabitIds = new Set((next.habits ?? []).map((h) => h.id));
+  const prevChecks = checkPairs(prev);
+  const nextChecks = checkPairs(next);
+
   return {
+    upsertHabits: (next.habits ?? []).filter((h) => JSON.stringify(prevHabits.get(h.id)) !== JSON.stringify(h)),
+    deleteHabitIds: [...prevHabits.keys()].filter((id) => !nextHabitIds.has(id)),
+    addChecks: [...nextChecks].filter((k) => !prevChecks.has(k)).map(toPair),
+    // Отметки удалённой привычки сервер удалит сам (on delete cascade).
+    removeChecks: [...prevChecks]
+      .filter((k) => !nextChecks.has(k) && nextHabitIds.has(toPair(k)[0]))
+      .map(toPair),
     settings: settingsChanged ? next.settings : null,
     upsertPeriods: next.periods.filter((p) => {
       const old = prevPeriods.get(p.start);
@@ -58,7 +84,11 @@ export function isEmptyOps(ops: SyncOps): boolean {
     ops.upsertPeriods.length === 0 &&
     ops.deletePeriodStarts.length === 0 &&
     ops.upsertLogs.length === 0 &&
-    ops.deleteLogDates.length === 0
+    ops.deleteLogDates.length === 0 &&
+    ops.upsertHabits.length === 0 &&
+    ops.deleteHabitIds.length === 0 &&
+    ops.addChecks.length === 0 &&
+    ops.removeChecks.length === 0
   );
 }
 
@@ -86,5 +116,22 @@ export function mergeGuestIntoAccount(account: GuestData, guest: GuestData): Gue
     settings: hasData(account) ? account.settings : guest.settings,
     periods,
     dayLogs: { ...guest.dayLogs, ...account.dayLogs },
+    ...mergeHabits(account, guest),
   };
+}
+
+/** Привычки с устройства добавляются к привычкам аккаунта, отметки объединяются. */
+function mergeHabits(account: GuestData, guest: GuestData): Pick<GuestData, "habits" | "habitChecks"> {
+  const known = new Set((account.habits ?? []).map((h) => h.id));
+  const offset = account.habits?.length ?? 0;
+  const habits = [
+    ...(account.habits ?? []),
+    ...(guest.habits ?? []).filter((h) => !known.has(h.id)).map((h, i) => ({ ...h, position: offset + i })),
+  ];
+  if (!habits.length) return {};
+  const checks: Record<IsoDate, string[]> = {};
+  for (const source of [account.habitChecks ?? {}, guest.habitChecks ?? {}]) {
+    for (const [date, ids] of Object.entries(source)) checks[date] = [...new Set([...(checks[date] ?? []), ...ids])];
+  }
+  return { habits, habitChecks: checks };
 }

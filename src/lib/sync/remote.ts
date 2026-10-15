@@ -18,9 +18,25 @@ function rows<T>(result: { data: T | null; error: { message: string } | null }):
   return data;
 }
 
+/** Таблицы ещё нет (не выполнена миграция) — для необязательных частей вроде привычек. */
+function missingTable(error: { code?: string } | null): boolean {
+  return error?.code === "42P01" || error?.code === "PGRST205";
+}
+
+async function fetchHabits(sb: SupabaseClient, userId: string): Promise<Pick<GuestData, "habits" | "habitChecks">> {
+  const [habits, checks] = await Promise.all([
+    sb.from("habits").select("id, name, emoji, goal, position").eq("user_id", userId),
+    sb.from("habit_checks").select("habit_id, date").eq("user_id", userId),
+  ]);
+  if (missingTable(habits.error) || missingTable(checks.error)) return {};
+  const habitChecks: Record<string, string[]> = {};
+  for (const c of rows(checks)) (habitChecks[c.date] ??= []).push(c.habit_id);
+  return { habits: rows(habits), habitChecks };
+}
+
 export async function fetchAccountData(sb: SupabaseClient, userId: string): Promise<GuestData> {
   // MVP: одного запроса хватает на годы записей (лимит сервера — 1000 строк на запрос).
-  const [profile, periods, logs] = await Promise.all([
+  const [profile, periods, logs, habits] = await Promise.all([
     sb.from("profiles").select("*").eq("id", userId).single(),
     sb.from("periods").select("start_date, end_date").eq("user_id", userId).order("start_date"),
     sb
@@ -28,6 +44,7 @@ export async function fetchAccountData(sb: SupabaseClient, userId: string): Prom
       .select("date, flow, symptoms, moods, note, temperature, ovulation_test")
       .eq("user_id", userId)
       .order("date"),
+    fetchHabits(sb, userId),
   ]);
   const p = rows(profile);
   const dayLogs: DayLogs = {};
@@ -52,6 +69,7 @@ export async function fetchAccountData(sb: SupabaseClient, userId: string): Prom
     },
     periods: rows(periods).map((r) => ({ start: r.start_date, end: r.end_date })),
     dayLogs,
+    ...habits,
   });
   if (!data) throw new Error("Сервер вернул данные в неожиданном формате");
   return data;
@@ -106,6 +124,36 @@ export async function pushOps(sb: SupabaseClient, userId: string, ops: SyncOps):
         { onConflict: "user_id,date" },
       ),
     );
+  }
+  if (ops.upsertHabits.length > 0) {
+    check(
+      await sb.from("habits").upsert(
+        ops.upsertHabits.map((h) => ({
+          id: h.id,
+          user_id: userId,
+          name: h.name,
+          emoji: h.emoji || null,
+          goal: h.goal,
+          position: h.position,
+          updated_at: new Date().toISOString(),
+        })),
+        { onConflict: "id" },
+      ),
+    );
+  }
+  if (ops.addChecks.length > 0) {
+    check(
+      await sb.from("habit_checks").upsert(
+        ops.addChecks.map(([habitId, date]) => ({ user_id: userId, habit_id: habitId, date })),
+        { onConflict: "habit_id,date", ignoreDuplicates: true },
+      ),
+    );
+  }
+  for (const [habitId, date] of ops.removeChecks) {
+    check(await sb.from("habit_checks").delete().eq("habit_id", habitId).eq("date", date));
+  }
+  if (ops.deleteHabitIds.length > 0) {
+    check(await sb.from("habits").delete().in("id", ops.deleteHabitIds));
   }
 }
 

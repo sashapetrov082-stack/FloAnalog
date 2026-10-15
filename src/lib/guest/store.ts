@@ -3,6 +3,7 @@
 
 import type { Period } from "@/lib/cycle/predict";
 import { assertIsoDate, type IsoDate } from "@/lib/cycle/dates";
+import type { Habit, HabitChecks } from "@/lib/habits";
 import type { DayLog, DayLogs, FlowLevel, OvulationTest } from "@/lib/journal";
 
 export type TrackingMode = "cycle" | "conception" | "pregnancy";
@@ -21,6 +22,9 @@ export interface GuestData {
   settings: GuestSettings;
   periods: Period[];
   dayLogs: DayLogs;
+  /** Трекер привычек. Нет поля — привычек нет. */
+  habits?: Habit[];
+  habitChecks?: HabitChecks;
 }
 
 const DB_NAME = "floanalog";
@@ -54,6 +58,11 @@ async function withStore<T>(mode: IDBTransactionMode, fn: (store: IDBObjectStore
 const FLOW_LEVELS: FlowLevel[] = ["spotting", "light", "medium", "heavy"];
 const OVULATION_TESTS: OvulationTest[] = ["negative", "positive", "peak"];
 
+function habitsPart(rawHabits: unknown, rawChecks: unknown): Pick<GuestData, "habits" | "habitChecks"> {
+  const habits = parseHabits(rawHabits);
+  return habits.length ? { habits, habitChecks: parseHabitChecks(rawChecks, habits) } : {};
+}
+
 export function parseMode(value: unknown): TrackingMode {
   return value === "conception" || value === "pregnancy" ? value : "cycle";
 }
@@ -86,13 +95,45 @@ function parseDayLogs(raw: unknown): DayLogs {
   return logs;
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function parseHabits(raw: unknown): Habit[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((h: Partial<Habit>) => {
+    if (!h || typeof h.id !== "string" || !UUID_RE.test(h.id)) return [];
+    if (typeof h.name !== "string" || !h.name.trim()) return [];
+    const goal = Number.isInteger(h.goal) ? Math.min(31, Math.max(1, h.goal!)) : 31;
+    const position = Number.isInteger(h.position) ? Math.min(999, Math.max(0, h.position!)) : 0;
+    return [{ id: h.id, name: h.name.slice(0, 60), emoji: typeof h.emoji === "string" ? h.emoji.slice(0, 16) : "", goal, position }];
+  });
+}
+
+function parseHabitChecks(raw: unknown, habits: Habit[]): HabitChecks {
+  if (!raw || typeof raw !== "object") return {};
+  const ids = new Set(habits.map((h) => h.id));
+  const checks: HabitChecks = {};
+  for (const [date, value] of Object.entries(raw as Record<string, unknown>)) {
+    assertIsoDate(date);
+    const list = [...new Set(stringList(value).filter((id) => ids.has(id)))];
+    if (list.length) checks[date] = list;
+  }
+  return checks;
+}
+
 /**
  * Проверка формы данных: битые или чужие данные не должны ронять приложение.
  * Данные старой версии 1 (без журнала) переводятся в версию 2.
  */
 export function parseGuestData(raw: unknown): GuestData | null {
   if (!raw || typeof raw !== "object") return null;
-  const data = raw as { version?: unknown; settings?: Partial<GuestSettings>; periods?: Period[]; dayLogs?: unknown };
+  const data = raw as {
+    version?: unknown;
+    settings?: Partial<GuestSettings>;
+    periods?: Period[];
+    dayLogs?: unknown;
+    habits?: unknown;
+    habitChecks?: unknown;
+  };
   if ((data.version !== 1 && data.version !== 2) || !data.settings || !Array.isArray(data.periods)) return null;
   const { cycleLength, periodLength } = data.settings;
   if (typeof cycleLength !== "number" || typeof periodLength !== "number") return null;
@@ -111,6 +152,7 @@ export function parseGuestData(raw: unknown): GuestData | null {
       settings: { cycleLength, periodLength, mode, pregnancyLmp: lmp ?? null },
       periods,
       dayLogs: parseDayLogs(data.dayLogs),
+      ...habitsPart(data.habits, data.habitChecks),
     };
   } catch {
     return null;

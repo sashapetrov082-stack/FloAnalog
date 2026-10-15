@@ -86,3 +86,31 @@ describe("mergeGuestIntoAccount", () => {
     expect(merged.dayLogs["2026-09-30"].flow).toBe("light");
   });
 });
+
+describe("синхронизация привычек", () => {
+  const h1 = { id: "11111111-1111-4111-8111-111111111111", name: "Вода", emoji: "💧", goal: 31, position: 0 };
+  const h2 = { id: "22222222-2222-4222-8222-222222222222", name: "Книга", emoji: "📚", goal: 10, position: 1 };
+  const withHabits: GuestData = { ...base, habits: [h1, h2], habitChecks: { "2026-10-01": [h1.id, h2.id] } };
+
+  it("новые привычки и отметки, снятые отметки, удалённая привычка", () => {
+    const first = diffData(base, withHabits);
+    expect(first.upsertHabits).toHaveLength(2);
+    expect(first.addChecks).toEqual([[h1.id, "2026-10-01"], [h2.id, "2026-10-01"]]);
+    const next: GuestData = { ...withHabits, habits: [{ ...h1, goal: 20 }], habitChecks: { "2026-10-02": [h1.id] } };
+    const ops = diffData(withHabits, next);
+    expect(ops.upsertHabits).toEqual([{ ...h1, goal: 20 }]);
+    expect(ops.deleteHabitIds).toEqual([h2.id]);
+    expect(ops.addChecks).toEqual([[h1.id, "2026-10-02"]]);
+    // Отметка удалённой привычки уйдёт каскадом — отдельно не удаляем.
+    expect(ops.removeChecks).toEqual([[h1.id, "2026-10-01"]]);
+    expect(isEmptyOps(diffData(withHabits, structuredClone(withHabits)))).toBe(true);
+  });
+
+  it("гостевые привычки добавляются к привычкам аккаунта", () => {
+    const account: GuestData = { ...base, habits: [h1], habitChecks: { "2026-10-01": [h1.id] } };
+    const guest: GuestData = { ...base, habits: [{ ...h2, position: 0 }], habitChecks: { "2026-10-01": [h2.id] } };
+    const merged = mergeGuestIntoAccount(account, guest);
+    expect(merged.habits?.map((h) => [h.id, h.position])).toEqual([[h1.id, 0], [h2.id, 1]]);
+    expect(merged.habitChecks).toEqual({ "2026-10-01": [h1.id, h2.id] });
+  });
+});

@@ -25,6 +25,7 @@ import { ContraceptionSettingsCard, ContraceptionToday, useContraception, type C
 import { DayLogEditor } from "./DayLogEditor";
 import { ImportDialog } from "./ImportDialog";
 import { DrawingsTab } from "./Drawings";
+import { HabitsTab } from "./Habits";
 import { PairTab } from "./PairTab";
 import { PushCard } from "./PushCard";
 import { Report } from "./Report";
@@ -32,7 +33,7 @@ import { StatusCard } from "./StatusCard";
 import type { SyncStatus } from "./useCycleData";
 import { Button, Card, Disclaimer, Stepper } from "./ui";
 
-type Tab = "today" | "calendar" | "pair" | "drawings" | "settings";
+type Tab = "today" | "calendar" | "habits" | "pair" | "drawings" | "settings";
 type PairRole = "owner" | "partner" | null;
 
 export interface PinControl {
@@ -52,6 +53,7 @@ export interface AccountInfo {
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: "today", label: "Сегодня", icon: "●" },
   { id: "calendar", label: "Календарь", icon: "▦" },
+  { id: "habits", label: "Привычки", icon: "✓" },
   { id: "pair", label: "Пара", icon: "♡" },
   { id: "drawings", label: "Рисунки", icon: "✎" },
   { id: "settings", label: "Настройки", icon: "⚙" },
@@ -291,6 +293,8 @@ export function Home({
           </>
         )}
 
+        {shownTab === "habits" && <HabitsTab data={data} today={today} onChange={onChange} />}
+
         {shownTab === "pair" && (
           <PairTab userId={account?.userId ?? null} today={today} onSignIn={onSignIn} onRole={updateRole} />
         )}
@@ -324,7 +328,7 @@ export function Home({
                 type="button"
                 aria-current={shownTab === t.id ? "page" : undefined}
                 onClick={() => setTab(t.id)}
-                className={`flex w-full flex-col items-center gap-0.5 py-3 text-xs ${
+                className={`flex w-full flex-col items-center gap-0.5 py-3 text-[11px] leading-tight ${
                   shownTab === t.id ? "font-semibold text-accent" : "text-muted"
                 }`}
               >

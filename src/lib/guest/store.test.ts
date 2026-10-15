@@ -57,4 +57,16 @@ describe("гостевое хранилище", () => {
     expect(odd?.dayLogs["2026-10-02"]).toMatchObject({ temperature: null, ovulationTest: null });
     expect(parseGuestData({ ...sample, settings: { cycleLength: 28, periodLength: 5 } })?.settings.mode).toBe("cycle");
   });
+
+  it("привычки: проверка формы, отметки только существующих привычек", () => {
+    const id = "11111111-1111-4111-8111-111111111111";
+    const parsed = parseGuestData({
+      ...sample,
+      habits: [{ id, name: "Вода", emoji: "💧", goal: 40, position: 0 }, { id: "не uuid", name: "x" }],
+      habitChecks: { "2026-10-01": [id, "чужой"] },
+    });
+    expect(parsed?.habits).toEqual([{ id, name: "Вода", emoji: "💧", goal: 31, position: 0 }]);
+    expect(parsed?.habitChecks).toEqual({ "2026-10-01": [id] });
+    expect(parseGuestData(sample)?.habits).toBeUndefined();
+  });
 });

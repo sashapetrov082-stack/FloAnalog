@@ -223,6 +223,31 @@ do $$ begin
   if public.get_partner_view() ? 'pregnancy' then raise exception 'FAIL 29: срок виден вне режима беременности'; end if;
 end $$;
 
+-- 30. Привычки: свои видны и меняются, чужие — нет; чужую привычку не отметить.
+select pg_temp.logout(); select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+insert into public.habits (id, name, goal) values ('00000000-0000-0000-0000-0000000000f1', 'Вода', 31);
+insert into public.habit_checks (habit_id, date) values ('00000000-0000-0000-0000-0000000000f1', current_date);
+select pg_temp.logout(); select pg_temp.login('00000000-0000-0000-0000-00000000000b');
+do $$ declare n int; begin
+  select count(*) into n from public.habits; if n <> 0 then raise exception 'FAIL 30: чужие привычки видны'; end if;
+  select count(*) into n from public.habit_checks; if n <> 0 then raise exception 'FAIL 30: чужие отметки видны'; end if;
+  if public.get_partner_view()::text like '%Вода%' then raise exception 'FAIL 30: привычки в экране партнёра'; end if;
+  begin
+    insert into public.habit_checks (habit_id, date) values ('00000000-0000-0000-0000-0000000000f1', current_date - 1);
+    raise exception 'FAIL 30: отметил чужую привычку';
+  exception when others then if sqlerrm like 'FAIL%' then raise; end if; end;
+  update public.habits set name = 'взлом';
+  delete from public.habit_checks;
+end $$;
+select pg_temp.logout(); select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+do $$ begin
+  if (select name from public.habits) <> 'Вода' or (select count(*) from public.habit_checks) <> 1 then
+    raise exception 'FAIL 30: чужой изменил привычку'; end if;
+  delete from public.habits;
+  if exists (select 1 from public.habit_checks) then raise exception 'FAIL 30: отметки не удалились с привычкой'; end if;
+end $$;
+select pg_temp.logout(); select pg_temp.login('00000000-0000-0000-0000-00000000000b');
+
 -- 12. Каждый просмотр пишется в журнал, журнал видит только владелица.
 do $$ declare n int; begin
   select count(*) into n from public.access_log; if n <> 0 then raise exception 'FAIL 12: партнёр видит журнал'; end if;
