@@ -19,6 +19,7 @@ import { Calendar } from "./Calendar";
 import { DayLogEditor } from "./DayLogEditor";
 import { DrawingsTab } from "./Drawings";
 import { PairTab } from "./PairTab";
+import { PushCard } from "./PushCard";
 import { StatusCard } from "./StatusCard";
 import type { SyncStatus } from "./useCycleData";
 import { Button, Card, Disclaimer, Stepper } from "./ui";
@@ -95,9 +96,20 @@ export function Home({
   const { periods, settings, dayLogs } = data;
   const [tab, setTab] = useState<Tab>(() => {
     // Партнёр, вошедший через «Я партнёр — у меня есть код», сразу попадает во вкладку «Пара».
-    const start = typeof window !== "undefined" ? sessionStorage.getItem("start-tab") : null;
-    if (start === "pair") sessionStorage.removeItem("start-tab");
-    return start === "pair" ? "pair" : "today";
+    if (typeof window === "undefined") return "today";
+    const start = sessionStorage.getItem("start-tab");
+    if (start === "pair") {
+      sessionStorage.removeItem("start-tab");
+      return "pair";
+    }
+    // Переход из уведомления: /?tab=pair и т. п.
+    const url = new URL(window.location.href);
+    const fromUrl = url.searchParams.get("tab");
+    if (fromUrl) {
+      url.searchParams.delete("tab");
+      window.history.replaceState(null, "", url.toString());
+    }
+    return TABS.some((t) => t.id === fromUrl) ? (fromUrl as Tab) : "today";
   });
   // Роль в паре. Партнёру не нужны свой цикл и журнал — у него только «Пара», «Рисунки», «Настройки».
   const roleKey = account ? `pair-role:${account.userId}` : null;
@@ -562,6 +574,8 @@ function SettingsTab({
       <h1 className="text-2xl font-semibold">Настройки</h1>
 
       <AccountCard account={account} onSignIn={onSignIn} />
+
+      {account && <PushCard partnerMode={partnerMode} />}
 
       <Card className="flex flex-col gap-3">
         <h2 className="text-lg font-semibold">PIN-код</h2>

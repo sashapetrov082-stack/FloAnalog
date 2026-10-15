@@ -23,6 +23,7 @@ import {
   type PairLink,
   type SavedDrawing,
 } from "@/lib/pair";
+import { notifyPartner } from "@/lib/push";
 import { getSupabase } from "@/lib/supabase/client";
 import { Button, Card } from "./ui";
 
@@ -423,6 +424,7 @@ export function DrawingsTab({ userId }: { userId: string | null }) {
           onClose={() => setEditing(false)}
           onSend={async (d) => {
             await addDrawing(sb, link.linkId, d);
+            notifyPartner(sb, "drawing");
             setEditing(false);
             load();
           }}

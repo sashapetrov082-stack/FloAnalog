@@ -5,6 +5,7 @@ import type { IsoDate } from "@/lib/cycle/dates";
 import { formatDayMonth } from "@/lib/format";
 import { addNote, deleteNote, listNotes, setNoteFlag, type SharedNote } from "@/lib/pair";
 import { REQUESTS } from "@/lib/status";
+import { notifyPartner } from "@/lib/push";
 import { getSupabase } from "@/lib/supabase/client";
 import { Button, Card } from "./ui";
 
@@ -59,6 +60,7 @@ export function SharedFeed({
   const post = (kind: "note" | "request", body: string, fromInput = false) =>
     run(async () => {
       await addNote(sb, linkId, { date: today, kind, body });
+      notifyPartner(sb, kind);
       if (fromInput) {
         // Стираем только отправленное: если за это время дописали — оставляем.
         setText((current) => (current.trim() === body ? "" : current));
@@ -163,7 +165,12 @@ export function SharedFeed({
                         type="button"
                         aria-pressed={done}
                         disabled={busy}
-                        onClick={() => run(() => setNoteFlag(sb, n.id, "done_at", !done))}
+                        onClick={() =>
+                          run(async () => {
+                            await setNoteFlag(sb, n.id, "done_at", !done);
+                            if (!done) notifyPartner(sb, "done");
+                          })
+                        }
                         className={`rounded-full border px-3 py-1 ${done ? "border-fertile bg-fertile text-white" : "border-border bg-surface"}`}
                       >
                         {done ? "Сделано ✓" : "Сделано"}

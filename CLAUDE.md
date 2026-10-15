@@ -16,7 +16,7 @@
 
 ## Стек
 
-Next.js (App Router) + TypeScript + Tailwind · Supabase (Postgres, Auth, Realtime) · Vitest · Serwist (PWA, позже) · Resend · Plausible.
+Next.js (App Router) + TypeScript + Tailwind · Supabase (Postgres, Auth, Realtime) · Vitest · PWA (свой сервис-воркер `public/sw.js`) · Web Push (`web-push`, VAPID) · Resend · Plausible.
 
 ## Структура
 
@@ -32,6 +32,11 @@ src/lib/pin.ts           PIN-код: хэш PBKDF2 с солью, паузы п�
 src/lib/pair.ts          режим пары: запросы к Supabase (коды, связи, видимость, экран партнёра)
 src/lib/sync/            синхронизация с аккаунтом: что отправить (diff), перенос гостевых данных, запросы к Supabase
 src/lib/supabase/        клиенты Supabase (браузер / сервер)
+src/lib/notify.ts        какие уведомления, кому, как часто; тексты — нейтральные
+src/lib/push.ts          подписка устройства на push, сигнал «уведоми партнёра»
+src/lib/server/          только сервер: отправка push с сервисным ключом Supabase
+src/app/api/             notify (событие пары → push), cron/reminders (напоминание о цикле, vercel.json)
+public/sw.js             сервис-воркер: работа без интернета, показ уведомлений
 supabase/migrations/     схема базы и правила доступа (RLS) — единственный источник правды
 supabase/tests/          проверки правил доступа
 scripts/test-db.sh       прогон миграций и проверок на временном локальном Postgres
@@ -57,6 +62,8 @@ docs/                    план продукта
 - Не получать доступ к рабочей базе с реальными данными и не класть её ключи в репозиторий. Только тестовый проект Supabase, ключи — в `.env.local`.
 - Не писать в интерфейсе диагнозов и не называть прогноз методом контрацепции. Предупреждения — мягкие, с советом обратиться к врачу.
 - Не использовать `Date.now()`/`new Date()` внутри `src/lib/cycle` — «сегодня» передаётся параметром.
+- Не импортировать `src/lib/server/*` в клиентский код и не делать `NEXT_PUBLIC_` из `SUPABASE_SERVICE_ROLE_KEY`, `VAPID_PRIVATE_KEY`, `CRON_SECRET` — эти ключи только в переменных Vercel.
+- Не писать в тексте push-уведомлений ничего о здоровье: они видны на экране блокировки.
 - Не держать даты цикла как `Date` с часовым поясом: только строки `YYYY-MM-DD` (см. `src/lib/cycle/dates.ts`).
 
 ## Как работать

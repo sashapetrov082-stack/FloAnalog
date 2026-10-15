@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { IsoDate } from "@/lib/cycle/dates";
 import { getDayStatus, saveDayStatus } from "@/lib/pair";
 import { EMPTY_STATUS, ENERGY, isEmptyStatus, LIBIDO, MOOD, NEEDS, type DayStatus } from "@/lib/status";
+import { notifyPartner } from "@/lib/push";
 import { getSupabase } from "@/lib/supabase/client";
 import { toggle } from "@/lib/journal";
 import { Card } from "./ui";
@@ -48,7 +49,11 @@ export function StatusCard({ userId, today }: { userId: string; today: IsoDate }
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => {
       saveDayStatus(sb, userId, today, isEmptyStatus(next) ? null : next).then(
-        () => setSaveState("saved"),
+        () => {
+          setSaveState("saved");
+          // Сервер уведомит партнёра, только если статус ему разрешено видеть, и не чаще раза в час.
+          if (!isEmptyStatus(next)) notifyPartner(sb, "status");
+        },
         () => setSaveState("error"),
       );
     }, 600);

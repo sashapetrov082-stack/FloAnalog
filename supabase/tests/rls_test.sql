@@ -257,6 +257,29 @@ do $$ begin
   exception when others then if sqlerrm = 'FAIL 17' then raise; end if; end;
 end $$;
 
+-- 26. Подписки на уведомления: каждый видит только свои; браузер переходит к новому аккаунту.
+select pg_temp.login('00000000-0000-0000-0000-00000000000c');
+select public.save_push_subscription('https://push.example/x', 'key1', 'auth1');
+select pg_temp.logout(); select pg_temp.login('00000000-0000-0000-0000-00000000000b');
+do $$ declare n int; begin
+  select count(*) into n from public.push_subscriptions; if n <> 0 then raise exception 'FAIL 26: видна чужая подписка'; end if;
+  begin insert into public.push_subscriptions (endpoint, p256dh, auth) values ('https://push.example/y', 'k', 'a');
+    raise exception 'FAIL 26: прямая запись подписки';
+  exception when insufficient_privilege then null; end;
+  perform public.delete_push_subscription('https://push.example/x'); -- чужую удалить нельзя
+end $$;
+select public.save_push_subscription('https://push.example/x', 'key2', 'auth2');
+do $$ begin
+  if (select count(*) from public.push_subscriptions) <> 1 then raise exception 'FAIL 26: подписка не перешла'; end if;
+  begin perform count(*) from public.notify_log; raise exception 'FAIL 26: журнал уведомлений доступен клиенту';
+  exception when insufficient_privilege then null; end;
+end $$;
+select public.delete_push_subscription('https://push.example/x');
+select pg_temp.logout();
+do $$ begin
+  if exists (select 1 from public.push_subscriptions) then raise exception 'FAIL 26: подписка не удалена'; end if;
+end $$;
+
 -- 18. Гость (anon) не имеет доступа ни к чему.
 select pg_temp.logout();
 set role anon;

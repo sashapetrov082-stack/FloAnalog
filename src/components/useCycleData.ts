@@ -21,6 +21,7 @@ import {
 import { cleanAuthParamsFromUrl, getSupabase, linkSignInProblem } from "@/lib/supabase/client";
 import { predict } from "@/lib/cycle/predict";
 import { predictionRow, savePredictionSnapshot } from "@/lib/pair";
+import { disablePush } from "@/lib/push";
 import { diffData, isEmptyOps, mergeGuestIntoAccount } from "@/lib/sync/diff";
 import { deleteAccount, fetchAccountData, pushOps, recordHealthConsent } from "@/lib/sync/remote";
 
@@ -206,6 +207,8 @@ export function useCycleData() {
     const sb = getSupabase();
     const user = userRef.current;
     await queue.current;
+    // Уведомления для этого аккаунта на этом устройстве больше не нужны.
+    await disablePush(sb).catch(() => undefined);
     await sb?.auth.signOut();
     if (user) await deleteRecord(cacheKey(user.id));
     userRef.current = null;
@@ -218,6 +221,7 @@ export function useCycleData() {
     const sb = getSupabase();
     const user = userRef.current;
     if (!sb || !user) return;
+    await disablePush(sb).catch(() => undefined);
     await deleteAccount(sb);
     await sb.auth.signOut();
     await deleteRecord(cacheKey(user.id));
