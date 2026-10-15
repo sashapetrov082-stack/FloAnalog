@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { explainTest } from "@/lib/notify";
-import { disablePush, enablePush, getPushState, pushConfigured, testPush, type PushState } from "@/lib/push";
+import { disablePush, enablePush, getPushState, pushConfigured, resyncPush, testPush, type PushState } from "@/lib/push";
 import { getSupabase } from "@/lib/supabase/client";
 import { Button, Card } from "./ui";
 
@@ -15,8 +15,12 @@ export function PushCard({ partnerMode }: { partnerMode: boolean }) {
   const [check, setCheck] = useState<{ ok: boolean; text: string } | null>(null);
 
   useEffect(() => {
-    getPushState().then(setState, () => setState("unsupported"));
-  }, []);
+    getPushState().then((s) => {
+      setState(s);
+      // Подписка могла остаться только в браузере — досылаем её на сервер.
+      if (s === "on" && sb) resyncPush(sb).catch(() => undefined);
+    }, () => setState("unsupported"));
+  }, [sb]);
 
   if (!sb || !pushConfigured() || !state) return null;
 

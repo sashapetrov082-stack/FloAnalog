@@ -36,6 +36,11 @@ export async function enablePush(sb: SupabaseClient): Promise<PushState> {
       userVisibleOnly: true,
       applicationServerKey: base64ToBytes(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!),
     }));
+  await saveSubscription(sb, subscription);
+  return "on";
+}
+
+async function saveSubscription(sb: SupabaseClient, subscription: PushSubscription): Promise<void> {
   const json = subscription.toJSON();
   const { error } = await sb.rpc("save_push_subscription", {
     p_endpoint: json.endpoint,
@@ -43,7 +48,17 @@ export async function enablePush(sb: SupabaseClient): Promise<PushState> {
     p_auth: json.keys?.auth,
   });
   if (error) throw new Error(error.message);
-  return "on";
+}
+
+/**
+ * Если браузер подписан, ещё раз сохранить подписку на сервере. Лечит случаи, когда подписка
+ * есть только в браузере: сохранение когда-то не удалось, или в браузере сменился аккаунт.
+ */
+export async function resyncPush(sb: SupabaseClient): Promise<void> {
+  if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+  const registration = await navigator.serviceWorker.getRegistration();
+  const subscription = await registration?.pushManager.getSubscription();
+  if (subscription) await saveSubscription(sb, subscription);
 }
 
 /** Выключить уведомления на этом устройстве (и при выходе из аккаунта). */
@@ -77,6 +92,7 @@ export async function notifyPartner(sb: SupabaseClient, event: NotifyEvent): Pro
 export async function testPush(sb: SupabaseClient): Promise<TestResult> {
   const { data } = await sb.auth.getSession();
   const token = data.session?.access_token;
+  await resyncPush(sb).catch(() => undefined);
   const registration = await navigator.serviceWorker.getRegistration();
   const subscription = await registration?.pushManager.getSubscription();
   const response = await fetch("/api/notify/test", {
