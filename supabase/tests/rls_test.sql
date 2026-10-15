@@ -357,4 +357,22 @@ do $$ begin
     raise exception 'FAIL 20: удалён чужой аккаунт'; end if;
 end $$;
 
+-- 28. Сервер (service_role) может прочитать всё, что нужно для уведомлений.
+set role service_role;
+do $$ begin
+  perform count(*) from public.push_subscriptions;
+  perform count(*) from public.partner_links;
+  perform count(*) from public.share_settings;
+  perform count(*) from public.profiles;
+  perform count(*) from public.predictions;
+  perform count(*) from public.contraception;
+  perform count(*) from public.contraception_log;
+  perform count(*) from public.notify_log;
+  insert into public.notify_log (sender_id, event) values ('00000000-0000-0000-0000-00000000000b', 'test');
+  delete from public.push_subscriptions where false;
+exception when insufficient_privilege then
+  raise exception 'FAIL 28: серверу не хватает прав: %', sqlerrm;
+end $$;
+reset role;
+
 \echo 'Все проверки доступа пройдены'
