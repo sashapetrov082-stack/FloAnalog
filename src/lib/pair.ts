@@ -83,13 +83,15 @@ export const SHARE_KEYS = [
   "mood",
   "symptoms",
   "contraception",
+  "pregnancy",
 ] as const;
 export type ShareKey = (typeof SHARE_KEYS)[number];
 export type ShareSettings = Record<ShareKey, boolean>;
 
 export async function getShareSettings(sb: SupabaseClient, linkId: string): Promise<ShareSettings> {
-  const s = check(await sb.from("share_settings").select(SHARE_KEYS.join(", ")).eq("link_id", linkId).single());
-  return s as unknown as ShareSettings;
+  // select("*"): новые разрешения появляются миграциями; пока колонки нет — считаем выключенным.
+  const s = check(await sb.from("share_settings").select("*").eq("link_id", linkId).single()) as Record<string, unknown>;
+  return Object.fromEntries(SHARE_KEYS.map((k) => [k, s?.[k] === true])) as ShareSettings;
 }
 
 export async function updateShareSettings(
@@ -123,6 +125,7 @@ export interface PartnerView {
   dayLogs?: { date: IsoDate; moods?: string[]; symptoms?: string[] }[];
   dailyStatus?: ({ date: IsoDate } & Partial<DayStatus>)[];
   /** Только метод, схема и отметки о приёме за последнюю неделю. */
+  pregnancy?: { lmp: IsoDate };
   contraception?: {
     method: Method;
     regimen: PillRegimen | null;
@@ -144,6 +147,7 @@ export async function getPartnerView(sb: SupabaseClient, from: IsoDate, to: IsoD
     dayLogs: v.day_logs ?? undefined,
     dailyStatus: v.daily_status ?? undefined,
     contraception: contraceptionView(v.contraception),
+    pregnancy: v.pregnancy ?? undefined,
   };
 }
 

@@ -3,7 +3,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { GuestData } from "@/lib/guest/store";
-import { parseGuestData, parseTemperature } from "@/lib/guest/store";
+import { parseGuestData, parseMode, parseTemperature } from "@/lib/guest/store";
 import type { DayLogs } from "@/lib/journal";
 import type { SyncOps } from "./diff";
 
@@ -21,7 +21,7 @@ function rows<T>(result: { data: T | null; error: { message: string } | null }):
 export async function fetchAccountData(sb: SupabaseClient, userId: string): Promise<GuestData> {
   // MVP: одного запроса хватает на годы записей (лимит сервера — 1000 строк на запрос).
   const [profile, periods, logs] = await Promise.all([
-    sb.from("profiles").select("avg_cycle_length, avg_period_length, mode").eq("id", userId).single(),
+    sb.from("profiles").select("*").eq("id", userId).single(),
     sb.from("periods").select("start_date, end_date").eq("user_id", userId).order("start_date"),
     sb
       .from("day_logs")
@@ -47,7 +47,8 @@ export async function fetchAccountData(sb: SupabaseClient, userId: string): Prom
     settings: {
       cycleLength: p.avg_cycle_length,
       periodLength: p.avg_period_length,
-      mode: p.mode === "conception" ? "conception" : "cycle",
+      mode: parseMode(p.mode),
+      pregnancyLmp: p.pregnancy_lmp ?? null,
     },
     periods: rows(periods).map((r) => ({ start: r.start_date, end: r.end_date })),
     dayLogs,
@@ -65,6 +66,10 @@ export async function pushOps(sb: SupabaseClient, userId: string, ops: SyncOps):
           avg_cycle_length: ops.settings.cycleLength,
           avg_period_length: ops.settings.periodLength,
           mode: ops.settings.mode ?? "cycle",
+          // Колонка появилась позже (миграция 20261022000000_pregnancy) — шлём, только если она нужна.
+          ...(ops.settings.mode === "pregnancy" || ops.settings.pregnancyLmp
+            ? { pregnancy_lmp: ops.settings.pregnancyLmp ?? null }
+            : {}),
         })
         .eq("id", userId),
     );

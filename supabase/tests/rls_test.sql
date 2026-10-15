@@ -195,6 +195,34 @@ do $$ begin
   if not public.get_partner_view() ? 'prediction' then raise exception 'FAIL 27: прогноз пропал при мини-пили'; end if;
 end $$;
 
+-- 29. Беременность: партнёр видит срок только с разрешения; фаза цикла при этом не уходит.
+select pg_temp.logout(); select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+update public.profiles set mode = 'pregnancy', pregnancy_lmp = current_date - 84 where id = auth.uid();
+select pg_temp.logout(); select pg_temp.login('00000000-0000-0000-0000-00000000000b');
+do $$ declare v jsonb; begin
+  v := public.get_partner_view();
+  if v ? 'pregnancy' then raise exception 'FAIL 29: видно без разрешения'; end if;
+  if v ? 'prediction' or v ? 'fertility' then raise exception 'FAIL 29: фаза цикла при беременности'; end if;
+  update public.share_settings set pregnancy = true; -- партнёр сам включить не может
+end $$;
+select pg_temp.logout(); select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+do $$ begin
+  if (select pregnancy from public.share_settings) then raise exception 'FAIL 29: партнёр изменил разрешение'; end if;
+end $$;
+update public.share_settings set pregnancy = true;
+select pg_temp.logout(); select pg_temp.login('00000000-0000-0000-0000-00000000000b');
+do $$ declare n int; begin
+  if (public.get_partner_view()->'pregnancy'->>'lmp')::date <> current_date - 84 then raise exception 'FAIL 29: нет срока'; end if;
+  select count(*) into n from public.profiles where pregnancy_lmp is not null;
+  if n <> 0 then raise exception 'FAIL 29: профиль владелицы виден напрямую'; end if;
+end $$;
+select pg_temp.logout(); select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+update public.profiles set mode = 'cycle' where id = auth.uid();
+select pg_temp.logout(); select pg_temp.login('00000000-0000-0000-0000-00000000000b');
+do $$ begin
+  if public.get_partner_view() ? 'pregnancy' then raise exception 'FAIL 29: срок виден вне режима беременности'; end if;
+end $$;
+
 -- 12. Каждый просмотр пишется в журнал, журнал видит только владелица.
 do $$ declare n int; begin
   select count(*) into n from public.access_log; if n <> 0 then raise exception 'FAIL 12: партнёр видит журнал'; end if;

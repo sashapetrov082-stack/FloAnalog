@@ -27,6 +27,7 @@ import {
 } from "@/lib/pair";
 import { getSupabase } from "@/lib/supabase/client";
 import { describeStatus } from "@/lib/status";
+import { PartnerPregnancy } from "./Pregnancy";
 import { SharedFeed } from "./SharedFeed";
 import { Button, Card, Toggle } from "./ui";
 
@@ -56,6 +57,7 @@ const shareLabels: Record<ShareKey, string> = {
   mood: "Настроение из журнала",
   symptoms: "Симптомы из журнала",
   contraception: "Контрацепция: метод и отметки о приёме",
+  pregnancy: "Беременность: срок и дата родов",
 };
 
 function errorText(e: unknown): string {
@@ -520,7 +522,13 @@ function PartnerActive({
   const recentLogs = (view?.dayLogs ?? []).filter((l) => l.date >= addDays(today, -6) && l.date <= today).reverse();
   const lastPeriods = (view?.periods ?? []).slice(-3).reverse();
   const nothingShared =
-    view && !view.prediction && !view.periods && !view.dayLogs && !view.dailyStatus && !view.contraception;
+    view &&
+    !view.prediction &&
+    !view.periods &&
+    !view.dayLogs &&
+    !view.dailyStatus &&
+    !view.contraception &&
+    !view.pregnancy;
   const todayStatus = view?.dailyStatus?.find((d) => d.date === today);
   const statusLines = todayStatus ? describeStatus(todayStatus) : [];
 
@@ -564,6 +572,8 @@ function PartnerActive({
           </dl>
         </Card>
       )}
+
+      {view?.pregnancy && <PartnerPregnancy lmp={view.pregnancy.lmp} today={today} name={name} />}
 
       {view?.contraception && <PartnerContraception c={view.contraception} today={today} />}
 

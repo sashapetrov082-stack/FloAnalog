@@ -2,16 +2,18 @@
 // Гостевые данные при входе переезжают в аккаунт (см. src/lib/sync).
 
 import type { Period } from "@/lib/cycle/predict";
-import { assertIsoDate } from "@/lib/cycle/dates";
+import { assertIsoDate, type IsoDate } from "@/lib/cycle/dates";
 import type { DayLog, DayLogs, FlowLevel, OvulationTest } from "@/lib/journal";
 
-export type TrackingMode = "cycle" | "conception";
+export type TrackingMode = "cycle" | "conception" | "pregnancy";
 
 export interface GuestSettings {
   cycleLength: number;
   periodLength: number;
   /** Цель: просто отслеживать цикл или зачатие. Нет поля — «cycle». */
   mode?: TrackingMode;
+  /** Беременность: первый день последних месячных — от него считается срок. */
+  pregnancyLmp?: IsoDate | null;
 }
 
 export interface GuestData {
@@ -51,6 +53,10 @@ async function withStore<T>(mode: IDBTransactionMode, fn: (store: IDBObjectStore
 
 const FLOW_LEVELS: FlowLevel[] = ["spotting", "light", "medium", "heavy"];
 const OVULATION_TESTS: OvulationTest[] = ["negative", "positive", "peak"];
+
+export function parseMode(value: unknown): TrackingMode {
+  return value === "conception" || value === "pregnancy" ? value : "cycle";
+}
 
 /** Температура из хранилища: число 34–43 (как ограничение в базе), два знака после запятой. */
 export function parseTemperature(value: unknown): number | null {
@@ -97,8 +103,15 @@ export function parseGuestData(raw: unknown): GuestData | null {
       if (p.end) assertIsoDate(p.end);
       return { start: p.start, end: p.end ?? null };
     });
-    const mode: TrackingMode = data.settings.mode === "conception" ? "conception" : "cycle";
-    return { version: 2, settings: { cycleLength, periodLength, mode }, periods, dayLogs: parseDayLogs(data.dayLogs) };
+    const mode = parseMode(data.settings.mode);
+    const lmp = data.settings.pregnancyLmp;
+    if (lmp) assertIsoDate(lmp);
+    return {
+      version: 2,
+      settings: { cycleLength, periodLength, mode, pregnancyLmp: lmp ?? null },
+      periods,
+      dayLogs: parseDayLogs(data.dayLogs),
+    };
   } catch {
     return null;
   }

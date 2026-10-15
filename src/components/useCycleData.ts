@@ -245,7 +245,8 @@ export function useCycleData() {
       defaultCycleLength: accountData.settings.cycleLength,
       defaultPeriodLength: accountData.settings.periodLength,
     });
-    const row = p ? predictionRow(p, accountToday) : null;
+    // В беременность прогноза цикла нет: партнёру и напоминанию «Скоро новый цикл» он не нужен.
+    const row = p && accountData.settings.mode !== "pregnancy" ? predictionRow(p, accountToday) : null;
     // Дата расчёта сама по себе не повод отправлять: партнёр считает «сегодня» сам.
     const key = JSON.stringify(row && { ...row, computed_for: null, cycle_day: null, phase: null });
     if (key === lastSnapshot.current) return;

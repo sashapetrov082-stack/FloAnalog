@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { isHormonalCycleControl, withdrawalDays } from "@/lib/cycle/contraception";
-import { compareDates, diffDays, type IsoDate } from "@/lib/cycle/dates";
+import { addDays, compareDates, diffDays, type IsoDate } from "@/lib/cycle/dates";
+import { dueDate, lmpFromDueDate } from "@/lib/cycle/pregnancy";
 import {
   findPeriodAt,
   markPeriodEnd,
@@ -19,6 +20,7 @@ import { getMyLinks } from "@/lib/pair";
 import { getSupabase } from "@/lib/supabase/client";
 import { Calendar } from "./Calendar";
 import { ConceptionCard } from "./Conception";
+import { PregnancyToday } from "./Pregnancy";
 import { ContraceptionSettingsCard, ContraceptionToday, useContraception, type ContraceptionState } from "./Contraception";
 import { DayLogEditor } from "./DayLogEditor";
 import { ImportDialog } from "./ImportDialog";
@@ -150,6 +152,7 @@ export function Home({
   );
   const [reportOpen, setReportOpen] = useState(false);
   const conception = settings.mode === "conception";
+  const pregnant = settings.mode === "pregnancy";
   const [selected, setSelected] = useState<IsoDate | null>(null);
   const [editing, setEditing] = useState<IsoDate | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -204,9 +207,11 @@ export function Home({
               <h1 className="text-2xl font-semibold first-letter:uppercase">{formatLong(today)}</h1>
             </header>
 
-            {!hormonal && <CycleCard prediction={prediction} today={today} />}
+            {pregnant && <PregnancyToday lmp={settings.pregnancyLmp ?? null} today={today} />}
 
-            {conception && prediction && (
+            {!hormonal && !pregnant && <CycleCard prediction={prediction} today={today} />}
+
+            {conception && !pregnant && prediction && (
               <ConceptionCard
                 prediction={prediction}
                 dayLogs={dayLogs}
@@ -216,15 +221,15 @@ export function Home({
               />
             )}
 
-            <ContraceptionToday state={contraception} today={today} />
+            {!pregnant && <ContraceptionToday state={contraception} today={today} />}
 
-            {!hormonal && prediction?.warnings.map((w) => (
+            {!hormonal && !pregnant && prediction?.warnings.map((w) => (
               <p key={w.type} className="rounded-2xl bg-warning-soft p-4 text-sm text-warning" role="note">
                 {warningText(w)}
               </p>
             ))}
 
-            {ongoing ? (
+            {pregnant ? null : ongoing ? (
               <Button onClick={() => markEnd(today)}>Месячные закончились сегодня</Button>
             ) : todayPeriod?.end ? (
               <p className="rounded-2xl bg-period-soft p-4 text-sm">
@@ -254,7 +259,8 @@ export function Home({
               <Calendar
                 periods={periods}
                 prediction={prediction}
-                withdrawal={withdrawal}
+                withdrawal={pregnant ? [] : withdrawal}
+                hideForecast={pregnant}
                 takenDates={contraception.config?.method === "none" ? null : contraception.taken}
                 today={today}
                 loggedDates={loggedDates}
@@ -661,6 +667,7 @@ function SettingsTab({
               [
                 ["cycle", "Отслеживать цикл"],
                 ["conception", "Хочу забеременеть"],
+                ["pregnancy", "Беременность"],
               ] as const
             ).map(([mode, label]) => (
               <Button
@@ -669,14 +676,29 @@ function SettingsTab({
                 aria-checked={(data.settings.mode ?? "cycle") === mode}
                 variant={(data.settings.mode ?? "cycle") === mode ? "primary" : "secondary"}
                 className="px-4"
-                onClick={() => set({ mode })}
+                onClick={() =>
+                  set(
+                    mode === "pregnancy" && !data.settings.pregnancyLmp
+                      ? { mode, pregnancyLmp: lastStart(data.periods) }
+                      : { mode },
+                  )
+                }
               >
                 {label}
               </Button>
             ))}
           </div>
+          {data.settings.mode === "pregnancy" && (
+            <PregnancyDates
+              lmp={data.settings.pregnancyLmp ?? null}
+              today={today}
+              onChange={(pregnancyLmp) => set({ pregnancyLmp })}
+            />
+          )}
           <p className="text-sm text-muted">
-            {data.settings.mode === "conception"
+            {data.settings.mode === "pregnancy"
+              ? "Вместо прогноза цикла — срок по неделям, дата родов и что происходит на этой неделе. Партнёр увидит срок, только если вы включите это во вкладке «Пара»."
+              : data.settings.mode === "conception"
               ? "На вкладке «Сегодня» — фертильность на сегодня и график базальной температуры. Температура и тесты на овуляцию партнёру не видны никогда."
               : "В режиме зачатия появятся фертильность на сегодня, базальная температура и тесты на овуляцию."}
           </p>
@@ -779,5 +801,48 @@ function SettingsTab({
 
       <Disclaimer />
     </>
+  );
+}
+
+function lastStart(periods: GuestData["periods"]): IsoDate | null {
+  return periods.reduce<IsoDate | null>((last, p) => (!last || compareDates(p.start, last) > 0 ? p.start : last), null);
+}
+
+/** Начало беременности: первый день последних месячных или дата родов, которую назвал врач. */
+function PregnancyDates({
+  lmp,
+  today,
+  onChange,
+}: {
+  lmp: IsoDate | null;
+  today: IsoDate;
+  onChange: (lmp: IsoDate | null) => void;
+}) {
+  const input = "rounded-2xl border border-border bg-surface px-4 py-3 text-base";
+  return (
+    <div className="flex flex-col gap-3">
+      <label className="flex flex-col gap-1">
+        <span className="text-sm text-muted">Первый день последних месячных</span>
+        <input
+          type="date"
+          className={input}
+          value={lmp ?? ""}
+          max={today}
+          min={addDays(today, -300)}
+          onChange={(e) => onChange(e.target.value || null)}
+        />
+      </label>
+      <label className="flex flex-col gap-1">
+        <span className="text-sm text-muted">или предполагаемая дата родов (если её назвал врач)</span>
+        <input
+          type="date"
+          className={input}
+          value={lmp ? dueDate(lmp) : ""}
+          min={today}
+          max={addDays(today, 300)}
+          onChange={(e) => onChange(e.target.value ? lmpFromDueDate(e.target.value) : null)}
+        />
+      </label>
+    </div>
   );
 }

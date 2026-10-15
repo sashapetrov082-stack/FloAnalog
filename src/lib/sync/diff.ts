@@ -37,7 +37,8 @@ export function diffData(prev: GuestData | null, next: GuestData): SyncOps {
     !prev ||
     prev.settings.cycleLength !== next.settings.cycleLength ||
     prev.settings.periodLength !== next.settings.periodLength ||
-    (prev.settings.mode ?? "cycle") !== (next.settings.mode ?? "cycle");
+    (prev.settings.mode ?? "cycle") !== (next.settings.mode ?? "cycle") ||
+    (prev.settings.pregnancyLmp ?? null) !== (next.settings.pregnancyLmp ?? null);
 
   return {
     settings: settingsChanged ? next.settings : null,

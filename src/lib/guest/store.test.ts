@@ -4,7 +4,7 @@ import { clearGuestData, loadGuestData, parseGuestData, saveGuestData, type Gues
 
 const sample: GuestData = {
   version: 2,
-  settings: { cycleLength: 29, periodLength: 5, mode: "conception" },
+  settings: { cycleLength: 29, periodLength: 5, mode: "pregnancy", pregnancyLmp: "2026-09-01" },
   periods: [{ start: "2026-10-01", end: null }],
   dayLogs: {
     "2026-10-02": {

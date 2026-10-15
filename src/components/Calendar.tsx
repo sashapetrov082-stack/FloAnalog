@@ -27,6 +27,7 @@ export function Calendar({
   periods,
   prediction,
   withdrawal = null,
+  hideForecast = false,
   takenDates = null,
   today,
   loggedDates,
@@ -37,6 +38,8 @@ export function Calendar({
   prediction: Prediction | null;
   /** Гормональная контрацепция: прогноз — кровотечение отмены, без фертильных дней. */
   withdrawal?: IsoDate[] | null;
+  /** Беременность: прогноза нет, только отмеченные дни. */
+  hideForecast?: boolean;
   /** Дни, когда отмечен приём контрацепции. */
   takenDates?: Set<IsoDate> | null;
   today: IsoDate;
@@ -124,10 +127,12 @@ export function Calendar({
         <li className="flex items-center gap-1.5">
           <span className="h-3 w-3 rounded-full bg-period" /> Месячные
         </li>
-        <li className="flex items-center gap-1.5">
-          <span className="h-3 w-3 rounded-full border-2 border-dashed border-period" />{" "}
-          {withdrawal ? "Кровотечение отмены" : "Прогноз"}
-        </li>
+        {!hideForecast && (
+          <li className="flex items-center gap-1.5">
+            <span className="h-3 w-3 rounded-full border-2 border-dashed border-period" />{" "}
+            {withdrawal ? "Кровотечение отмены" : "Прогноз"}
+          </li>
+        )}
         {!withdrawal && (
           <>
             <li className="flex items-center gap-1.5">
