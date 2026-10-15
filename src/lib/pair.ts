@@ -2,6 +2,7 @@
 // подтверждение, видимость) — на стороне базы, здесь только вызовы.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Method, PillRegimen } from "@/lib/cycle/contraception";
 import type { IsoDate } from "@/lib/cycle/dates";
 import type { PartnerFertility, PartnerPrediction } from "@/lib/cycle/partner";
 import type { Prediction } from "@/lib/cycle/predict";
@@ -73,7 +74,16 @@ export async function revokeLink(sb: SupabaseClient, linkId: string): Promise<vo
   check(await sb.rpc("revoke_partner_link", { p_link_id: linkId }));
 }
 
-export const SHARE_KEYS = ["prediction", "fertility", "periods", "daily_status", "libido", "mood", "symptoms"] as const;
+export const SHARE_KEYS = [
+  "prediction",
+  "fertility",
+  "periods",
+  "daily_status",
+  "libido",
+  "mood",
+  "symptoms",
+  "contraception",
+] as const;
 export type ShareKey = (typeof SHARE_KEYS)[number];
 export type ShareSettings = Record<ShareKey, boolean>;
 
@@ -112,6 +122,13 @@ export interface PartnerView {
   periods?: { start: IsoDate; end: IsoDate | null }[];
   dayLogs?: { date: IsoDate; moods?: string[]; symptoms?: string[] }[];
   dailyStatus?: ({ date: IsoDate } & Partial<DayStatus>)[];
+  /** Только метод, схема и отметки о приёме за последнюю неделю. */
+  contraception?: {
+    method: Method;
+    regimen: PillRegimen | null;
+    startDate: IsoDate;
+    takenDates: IsoDate[];
+  };
 }
 
 export async function getPartnerView(sb: SupabaseClient, from: IsoDate, to: IsoDate): Promise<PartnerView | null> {
@@ -126,7 +143,14 @@ export async function getPartnerView(sb: SupabaseClient, from: IsoDate, to: IsoD
     periods: v.periods ?? undefined,
     dayLogs: v.day_logs ?? undefined,
     dailyStatus: v.daily_status ?? undefined,
+    contraception: contraceptionView(v.contraception),
   };
+}
+
+function contraceptionView(raw: unknown): PartnerView["contraception"] {
+  if (!raw) return undefined;
+  const c = raw as { method: Method; regimen: PillRegimen | null; start_date: IsoDate; taken_dates: IsoDate[] | null };
+  return { method: c.method, regimen: c.regimen, startDate: c.start_date, takenDates: c.taken_dates ?? [] };
 }
 
 /** Строка таблицы predictions — опорные даты прогноза, которые видит партнёр (если разрешено). */

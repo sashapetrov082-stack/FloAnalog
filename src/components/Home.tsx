@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { isHormonalCycleControl, withdrawalDays } from "@/lib/cycle/contraception";
 import { compareDates, diffDays, type IsoDate } from "@/lib/cycle/dates";
 import {
   findPeriodAt,
@@ -13,9 +14,11 @@ import { predict, type Phase, type Prediction, type Warning } from "@/lib/cycle/
 import type { GuestData } from "@/lib/guest/store";
 import { formatDayMonth, formatLong, formatRange, pluralDays } from "@/lib/format";
 import { setDayLog, summarizeLog, type DayLog } from "@/lib/journal";
+import { exportContraception } from "@/lib/contraception";
 import { getMyLinks } from "@/lib/pair";
 import { getSupabase } from "@/lib/supabase/client";
 import { Calendar } from "./Calendar";
+import { ContraceptionSettingsCard, ContraceptionToday, useContraception, type ContraceptionState } from "./Contraception";
 import { DayLogEditor } from "./DayLogEditor";
 import { ImportDialog } from "./ImportDialog";
 import { DrawingsTab } from "./Drawings";
@@ -137,6 +140,12 @@ export function Home({
   const partnerMode = pairRole === "partner";
   const visibleTabs = partnerMode ? TABS.filter((t) => t.id !== "today" && t.id !== "calendar") : TABS;
   const shownTab: Tab = partnerMode && (tab === "today" || tab === "calendar") ? "pair" : tab;
+  const contraception = useContraception(account && !partnerMode ? account.userId : null, today);
+  const hormonal = contraception.config !== null && isHormonalCycleControl(contraception.config);
+  const withdrawal = useMemo(
+    () => (hormonal && contraception.config ? withdrawalDays(contraception.config, today, 6) : null),
+    [hormonal, contraception.config, today],
+  );
   const [selected, setSelected] = useState<IsoDate | null>(null);
   const [editing, setEditing] = useState<IsoDate | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -180,9 +189,11 @@ export function Home({
               <h1 className="text-2xl font-semibold first-letter:uppercase">{formatLong(today)}</h1>
             </header>
 
-            <CycleCard prediction={prediction} today={today} />
+            {!hormonal && <CycleCard prediction={prediction} today={today} />}
 
-            {prediction?.warnings.map((w) => (
+            <ContraceptionToday state={contraception} today={today} />
+
+            {!hormonal && prediction?.warnings.map((w) => (
               <p key={w.type} className="rounded-2xl bg-warning-soft p-4 text-sm text-warning" role="note">
                 {warningText(w)}
               </p>
@@ -218,6 +229,8 @@ export function Home({
               <Calendar
                 periods={periods}
                 prediction={prediction}
+                withdrawal={withdrawal}
+                takenDates={contraception.config?.method === "none" ? null : contraception.taken}
                 today={today}
                 loggedDates={loggedDates}
                 selected={selected}
@@ -263,6 +276,7 @@ export function Home({
             onSignIn={onSignIn}
             pin={pin}
             partnerMode={partnerMode}
+            contraception={contraception}
           />
         )}
       </main>
@@ -435,8 +449,13 @@ function DayPanel({
   );
 }
 
-function exportData(data: GuestData, today: IsoDate) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+async function exportData(data: GuestData, today: IsoDate, withAccount: boolean) {
+  const sb = getSupabase();
+  // Контрацепция хранится только в аккаунте — добавляем её в файл, если удаётся получить.
+  const contraception = withAccount && sb ? await exportContraception(sb).catch(() => undefined) : undefined;
+  const blob = new Blob([JSON.stringify(contraception ? { ...data, contraception } : data, null, 2)], {
+    type: "application/json",
+  });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -557,6 +576,7 @@ function SettingsTab({
   onSignIn,
   pin,
   partnerMode,
+  contraception,
 }: {
   data: GuestData;
   today: IsoDate;
@@ -566,6 +586,7 @@ function SettingsTab({
   onSignIn: (() => void) | null;
   pin: PinControl;
   partnerMode: boolean;
+  contraception: ContraceptionState;
 }) {
   const [confirming, setConfirming] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -630,6 +651,8 @@ function SettingsTab({
       </Card>
       )}
 
+      {account && !partnerMode && <ContraceptionSettingsCard state={contraception} today={today} />}
+
       <Card className="flex flex-col gap-3">
         <h2 className="text-lg font-semibold">Ваши данные</h2>
         {!account && (
@@ -638,7 +661,7 @@ function SettingsTab({
             пропадут — чтобы этого не случилось, войдите в аккаунт.
           </p>
         )}
-        <Button variant="secondary" onClick={() => exportData(data, today)}>
+        <Button variant="secondary" onClick={() => void exportData(data, today, !!account)}>
           Скачать мои данные
         </Button>
         {account ? null : confirming ? (

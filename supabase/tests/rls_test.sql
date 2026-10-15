@@ -166,6 +166,35 @@ do $$ begin
     raise exception 'FAIL 22: либидо не видно после разрешения'; end if;
 end $$;
 
+-- 27. Контрацепция: партнёр не видит без разрешения и не читает таблицы напрямую.
+select pg_temp.logout(); select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+insert into public.contraception (method, regimen, start_date) values ('pill', '21_7', current_date - 3);
+insert into public.contraception_log (date) values (current_date);
+select pg_temp.logout(); select pg_temp.login('00000000-0000-0000-0000-00000000000b');
+do $$ declare n int; begin
+  if public.get_partner_view() ? 'contraception' then raise exception 'FAIL 27: видно без разрешения'; end if;
+  select count(*) into n from public.contraception; if n <> 0 then raise exception 'FAIL 27: таблица видна партнёру'; end if;
+  select count(*) into n from public.contraception_log; if n <> 0 then raise exception 'FAIL 27: журнал виден партнёру'; end if;
+  update public.share_settings set contraception = true;
+end $$;
+select pg_temp.logout(); select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+update public.share_settings set contraception = true;
+select pg_temp.logout(); select pg_temp.login('00000000-0000-0000-0000-00000000000b');
+do $$ declare v jsonb; begin
+  v := public.get_partner_view()->'contraception';
+  if v->>'method' <> 'pill' or v->>'regimen' <> '21_7' or jsonb_array_length(v->'taken_dates') <> 1 then
+    raise exception 'FAIL 27: после разрешения %', v; end if;
+  -- При гормональном методе фаза и фертильное окно партнёру не уходят.
+  v := public.get_partner_view();
+  if v ? 'prediction' or v ? 'fertility' then raise exception 'FAIL 27: прогноз при гормональном методе'; end if;
+end $$;
+select pg_temp.logout(); select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+update public.contraception set regimen = 'pop';
+select pg_temp.logout(); select pg_temp.login('00000000-0000-0000-0000-00000000000b');
+do $$ begin
+  if not public.get_partner_view() ? 'prediction' then raise exception 'FAIL 27: прогноз пропал при мини-пили'; end if;
+end $$;
+
 -- 12. Каждый просмотр пишется в журнал, журнал видит только владелица.
 do $$ declare n int; begin
   select count(*) into n from public.access_log; if n <> 0 then raise exception 'FAIL 12: партнёр видит журнал'; end if;

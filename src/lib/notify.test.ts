@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { buildMessage, CYCLE_REMINDER, isAllowed, shouldSend } from "./notify";
+import {
+  buildMessage,
+  contraceptionReminder,
+  contraceptionReminderKey,
+  CYCLE_REMINDER,
+  isAllowed,
+  localClock,
+  parseTime,
+  shouldSend,
+} from "./notify";
 
 describe("уведомления", () => {
   it("роли: партнёр не может прислать «новый статус», владелица — «выполнено»", () => {
@@ -29,5 +38,18 @@ describe("уведомления", () => {
     expect(buildMessage("drawing", null).body).toBe("Партнёр: новый рисунок");
     const all = [buildMessage("status", "А"), buildMessage("note", "А"), CYCLE_REMINDER].map((m) => m.body).join(" ");
     expect(all).not.toMatch(/месячн|симптом|овуляц|либидо/i);
+  });
+
+  it("контрацепция: местное время, ключи, нейтральный текст", () => {
+    const now = new Date("2026-10-15T22:30:00Z");
+    expect(localClock(now, "Europe/Berlin")).toEqual({ date: "2026-10-16", minutes: 30 });
+    expect(localClock(now, "America/New_York")).toEqual({ date: "2026-10-15", minutes: 18 * 60 + 30 });
+    expect(localClock(new Date("2026-10-15T00:05:00Z"), "UTC")).toEqual({ date: "2026-10-15", minutes: 5 });
+    expect(localClock(now, "Not/AZone")).toBeNull();
+    expect(parseTime("21:05:00")).toBe(21 * 60 + 5);
+    expect(contraceptionReminderKey("repeat", "2026-10-16")).toBe("contra-r:2026-10-16");
+    for (const kind of ["first", "repeat"] as const) {
+      expect(contraceptionReminder(kind).body).not.toMatch(/таблет|контрацеп|кольц|пластыр|цикл/i);
+    }
   });
 });

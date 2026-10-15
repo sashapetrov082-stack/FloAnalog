@@ -49,8 +49,15 @@ export function dayMarks(
   periods: Period[],
   prediction: Prediction | null,
   today: IsoDate,
+  /** Гормональная контрацепция: вместо прогноза цикла — ожидаемое кровотечение отмены. */
+  withdrawal: IsoDate[] | null = null,
 ): Map<IsoDate, DayMark> {
   const marks = new Map<IsoDate, DayMark>();
+  if (withdrawal) {
+    for (const d of withdrawal) if (compareDates(d, today) >= 0) marks.set(d, "predicted-period");
+    markPeriods(marks, periods, prediction?.periodLength ?? 5, today);
+    return marks;
+  }
   if (!prediction) return marks;
   const { cycleLength, periodLength } = prediction;
 
@@ -69,6 +76,11 @@ export function dayMarks(
     });
   }
 
+  markPeriods(marks, periods, periodLength, today);
+  return marks;
+}
+
+function markPeriods(marks: Map<IsoDate, DayMark>, periods: Period[], periodLength: number, today: IsoDate): void {
   for (const p of periods) {
     const end = periodEnd(p, periodLength);
     eachDay(p.start, end, (d) => {
@@ -76,5 +88,4 @@ export function dayMarks(
       marks.set(d, !p.end && compareDates(d, today) > 0 ? "predicted-period" : "period");
     });
   }
-  return marks;
 }

@@ -89,4 +89,15 @@ describe("dayMarks", () => {
   it("без прогноза отметок нет", () => {
     expect(dayMarks([], null, today).size).toBe(0);
   });
+
+  it("гормональная контрацепция: без фертильных дней, прогноз — кровотечение отмены", () => {
+    const periods: Period[] = [{ start: "2026-09-20", end: "2026-09-24" }];
+    const p = predict({ periods, today, defaultCycleLength: 28, defaultPeriodLength: 5 });
+    const marks = dayMarks(periods, p, today, ["2026-10-01", "2026-10-23", "2026-10-24"]);
+    expect([...marks.values()]).not.toContain("fertile");
+    expect([...marks.values()]).not.toContain("ovulation");
+    expect(marks.get("2026-10-23")).toBe("predicted-period");
+    expect(marks.has("2026-10-01")).toBe(false); // прошедший день — не прогноз
+    expect(marks.get("2026-09-21")).toBe("period");
+  });
 });

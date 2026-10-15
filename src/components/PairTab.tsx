@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { describeScheme, METHODS, REGIMENS, schemeDay } from "@/lib/cycle/contraception";
 import { addDays, type IsoDate } from "@/lib/cycle/dates";
 import { partnerCycleInfo } from "@/lib/cycle/partner";
 import type { Phase } from "@/lib/cycle/predict";
-import { formatRange, pluralDays } from "@/lib/format";
+import { formatDayMonth, formatRange, pluralDays } from "@/lib/format";
 import { optionLabel } from "@/lib/journal";
 import {
   approveLink,
@@ -27,7 +28,7 @@ import {
 import { getSupabase } from "@/lib/supabase/client";
 import { describeStatus } from "@/lib/status";
 import { SharedFeed } from "./SharedFeed";
-import { Button, Card } from "./ui";
+import { Button, Card, Toggle } from "./ui";
 
 const phaseLabel: Record<Phase, string> = {
   menstruation: "Месячные",
@@ -54,6 +55,7 @@ const shareLabels: Record<ShareKey, string> = {
   libido: "Либидо в статусе дня",
   mood: "Настроение из журнала",
   symptoms: "Симптомы из журнала",
+  contraception: "Контрацепция: метод и отметки о приёме",
 };
 
 function errorText(e: unknown): string {
@@ -65,26 +67,6 @@ function errorText(e: unknown): string {
 function isAdult(birthDate: IsoDate, today: IsoDate): boolean {
   const [y, m, d] = birthDate.split("-").map(Number);
   return `${y + 18}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}` <= today;
-}
-
-function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
-  return (
-    <label className="flex min-h-11 cursor-pointer items-center justify-between gap-4">
-      <span>{label}</span>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        aria-label={label}
-        onClick={() => onChange(!checked)}
-        className={`relative h-7 w-12 shrink-0 rounded-full transition ${checked ? "bg-accent" : "bg-border"}`}
-      >
-        <span
-          className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${checked ? "left-6" : "left-1"}`}
-        />
-      </button>
-    </label>
-  );
 }
 
 export function PairTab({
@@ -537,7 +519,8 @@ function PartnerActive({
   const info = view?.prediction ? partnerCycleInfo(view.prediction, view.fertility ?? null, today) : null;
   const recentLogs = (view?.dayLogs ?? []).filter((l) => l.date >= addDays(today, -6) && l.date <= today).reverse();
   const lastPeriods = (view?.periods ?? []).slice(-3).reverse();
-  const nothingShared = view && !view.prediction && !view.periods && !view.dayLogs && !view.dailyStatus;
+  const nothingShared =
+    view && !view.prediction && !view.periods && !view.dayLogs && !view.dailyStatus && !view.contraception;
   const todayStatus = view?.dailyStatus?.find((d) => d.date === today);
   const statusLines = todayStatus ? describeStatus(todayStatus) : [];
 
@@ -581,6 +564,8 @@ function PartnerActive({
           </dl>
         </Card>
       )}
+
+      {view?.contraception && <PartnerContraception c={view.contraception} today={today} />}
 
       {view?.dailyStatus && (
         <Card className="flex flex-col gap-2">
@@ -647,5 +632,34 @@ function PartnerActive({
         />
       </Card>
     </>
+  );
+}
+
+function PartnerContraception({ c, today }: { c: NonNullable<PartnerView["contraception"]>; today: IsoDate }) {
+  const info = schemeDay(c, today);
+  const method = METHODS.find((m) => m.id === c.method)?.label ?? "";
+  const regimen = c.method === "pill" ? REGIMENS.find((r) => r.id === c.regimen)?.label : null;
+  const action = info?.actions[0];
+  const done = c.takenDates.includes(today);
+  return (
+    <Card className="flex flex-col gap-2">
+      <h2 className="text-lg font-semibold">Контрацепция</h2>
+      <p className="text-sm text-muted">
+        {method}
+        {regimen ? ` · ${regimen}` : ""}
+      </p>
+      {info ? (
+        <>
+          <p className="text-base font-medium">{describeScheme(c, info)}</p>
+          {action && (
+            <p className={`text-sm ${done ? "text-fertile" : "text-muted"}`}>
+              {done ? "✓ Сегодня отмечено" : "Сегодня ещё не отмечено"}
+            </p>
+          )}
+        </>
+      ) : (
+        <p className="text-sm text-muted">Схема начнётся {formatDayMonth(c.startDate)}.</p>
+      )}
+    </Card>
   );
 }

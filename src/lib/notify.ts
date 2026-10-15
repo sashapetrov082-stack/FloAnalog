@@ -59,3 +59,46 @@ export const CYCLE_REMINDER: PushMessage = {
   tag: "cycle_reminder",
   url: "/?tab=today",
 };
+
+/** Напоминание о контрацепции. Ни слова о таблетках: уведомление видно на экране блокировки. */
+export function contraceptionReminder(kind: "first" | "repeat"): PushMessage {
+  return {
+    title: "Трекер",
+    body: kind === "first" ? "Ежедневное напоминание" : "Напоминание: ещё не отмечено",
+    tag: "daily_reminder",
+    url: "/?tab=today",
+  };
+}
+
+/** Ключ в notify_log: одно первое и одно повторное напоминание в местный день. */
+export function contraceptionReminderKey(kind: "first" | "repeat", localDate: string): string {
+  return `${kind === "first" ? "contra" : "contra-r"}:${localDate}`;
+}
+
+/** Местные дата (YYYY-MM-DD) и минуты с полуночи в часовом поясе `timeZone`. Неизвестный пояс — null. */
+export function localClock(now: Date, timeZone: string): { date: string; minutes: number } | null {
+  try {
+    const parts = Object.fromEntries(
+      new Intl.DateTimeFormat("en-CA", {
+        timeZone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h23",
+      })
+        .formatToParts(now)
+        .map((p) => [p.type, p.value]),
+    );
+    return { date: `${parts.year}-${parts.month}-${parts.day}`, minutes: Number(parts.hour) * 60 + Number(parts.minute) };
+  } catch {
+    return null;
+  }
+}
+
+/** «21:00» или «21:00:00» → минуты с полуночи. */
+export function parseTime(time: string): number {
+  const [h, m] = time.split(":").map(Number);
+  return h * 60 + m;
+}

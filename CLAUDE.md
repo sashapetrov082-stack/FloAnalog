@@ -23,20 +23,22 @@ Next.js (App Router) + TypeScript + Tailwind · Supabase (Postgres, Auth, Realti
 ```
 src/app/                 страницы (App Router)
 src/components/          экраны: онбординг, вкладки «Сегодня» / «Календарь» / «Пара» / «Рисунки» / «Настройки», журнал дня
-src/lib/cycle/           прогноз, отметки месячных, разметка календаря — чистые функции, без React и без базы
+src/lib/cycle/           прогноз, отметки месячных, разметка календаря, схема контрацепции — чистые функции, без React и без базы
 src/lib/guest/           гостевой режим: хранение в IndexedDB
 src/lib/journal.ts       журнал дня: список симптомов и настроений
 src/lib/status.ts        статус дня и готовые просьбы
 src/lib/drawing.ts       рисунки: формат (линии в долях холста), кисти, фоны, отрисовка и проигрывание
 src/lib/import/          импорт истории месячных: гибкий разбор JSON Flo/Clue, zip, список дат
 src/lib/pin.ts           PIN-код: хэш PBKDF2 с солью, паузы после неудачных попыток
+src/lib/contraception.ts контрацепция: запросы к Supabase (метод, отметки о приёме) — только в аккаунте
 src/lib/pair.ts          режим пары: запросы к Supabase (коды, связи, видимость, экран партнёра)
 src/lib/sync/            синхронизация с аккаунтом: что отправить (diff), перенос гостевых данных, запросы к Supabase
 src/lib/supabase/        клиенты Supabase (браузер / сервер)
 src/lib/notify.ts        какие уведомления, кому, как часто; тексты — нейтральные
 src/lib/push.ts          подписка устройства на push, сигнал «уведоми партнёра»
 src/lib/server/          только сервер: отправка push с сервисным ключом Supabase
-src/app/api/             notify (событие пары → push), cron/reminders (напоминание о цикле, vercel.json)
+src/app/api/             notify (событие пары → push), cron/reminders (напоминание о цикле, vercel.json),
+                         cron/contraception (напоминание о контрацепции, каждые 5 минут — pg_cron, docs/contraception-cron.sql)
 public/sw.js             сервис-воркер: работа без интернета, показ уведомлений
 supabase/migrations/     схема базы и правила доступа (RLS) — единственный источник правды
 supabase/tests/          проверки правил доступа
