@@ -89,3 +89,23 @@ body {
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+
+/* Печать (отчёт для врача): всегда светлая тема, без фона. */
+@media print {
+  :root {
+    --background: #ffffff;
+    --foreground: #000000;
+    --surface: #ffffff;
+    --muted: #555555;
+    --border: #cccccc;
+  }
+  body {
+    background: #ffffff;
+  }
+  @page {
+    margin: 15mm;
+  }
+  .report tr {
+    break-inside: avoid;
+  }
+}

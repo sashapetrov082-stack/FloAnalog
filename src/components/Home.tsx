@@ -24,6 +24,7 @@ import { ImportDialog } from "./ImportDialog";
 import { DrawingsTab } from "./Drawings";
 import { PairTab } from "./PairTab";
 import { PushCard } from "./PushCard";
+import { Report } from "./Report";
 import { StatusCard } from "./StatusCard";
 import type { SyncStatus } from "./useCycleData";
 import { Button, Card, Disclaimer, Stepper } from "./ui";
@@ -146,6 +147,7 @@ export function Home({
     () => (hormonal && contraception.config ? withdrawalDays(contraception.config, today, 6) : null),
     [hormonal, contraception.config, today],
   );
+  const [reportOpen, setReportOpen] = useState(false);
   const [selected, setSelected] = useState<IsoDate | null>(null);
   const [editing, setEditing] = useState<IsoDate | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -173,6 +175,17 @@ export function Home({
     else setNotice("Не нашли месячные, которые начались в последние 2 недели до этой даты.");
   };
   const saveLog = (date: IsoDate, log: DayLog) => onChange({ ...data, dayLogs: setDayLog(dayLogs, date, log) });
+
+  if (reportOpen) {
+    return (
+      <Report
+        data={data}
+        today={today}
+        contraception={contraception.config}
+        onClose={() => setReportOpen(false)}
+      />
+    );
+  }
 
   return (
     <>
@@ -277,6 +290,7 @@ export function Home({
             pin={pin}
             partnerMode={partnerMode}
             contraception={contraception}
+            onReport={() => setReportOpen(true)}
           />
         )}
       </main>
@@ -577,6 +591,7 @@ function SettingsTab({
   pin,
   partnerMode,
   contraception,
+  onReport,
 }: {
   data: GuestData;
   today: IsoDate;
@@ -587,6 +602,7 @@ function SettingsTab({
   pin: PinControl;
   partnerMode: boolean;
   contraception: ContraceptionState;
+  onReport: () => void;
 }) {
   const [confirming, setConfirming] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -660,6 +676,11 @@ function SettingsTab({
             Сейчас данные хранятся только в этом браузере. Если очистить данные сайта или сменить устройство, они
             пропадут — чтобы этого не случилось, войдите в аккаунт.
           </p>
+        )}
+        {!partnerMode && (
+          <Button variant="secondary" onClick={onReport}>
+            Отчёт для врача (PDF)
+          </Button>
         )}
         <Button variant="secondary" onClick={() => void exportData(data, today, !!account)}>
           Скачать мои данные
