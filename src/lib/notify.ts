@@ -16,13 +16,14 @@ export function isAllowed(role: PairRole, event: string): event is NotifyEvent {
 }
 
 /** Не чаще чем раз в столько миллисекунд от одного человека. */
-export const THROTTLE_MS: Record<NotifyEvent | "cycle_reminder", number> = {
+export const THROTTLE_MS: Record<NotifyEvent | "cycle_reminder" | "test", number> = {
   status: 60 * 60_000,
   note: 60_000,
   request: 60_000,
   done: 60_000,
   drawing: 60_000,
   cycle_reminder: 20 * 60 * 60_000,
+  test: 30_000,
 };
 
 export function shouldSend(event: keyof typeof THROTTLE_MS, lastSentAt: Date | null, now: Date): boolean {
@@ -101,4 +102,55 @@ export function localClock(now: Date, timeZone: string): { date: string; minutes
 export function parseTime(time: string): number {
   const [h, m] = time.split(":").map(Number);
   return h * 60 + m;
+}
+
+export const TEST_MESSAGE: PushMessage = {
+  title: "Трекер",
+  body: "Проверка уведомлений: всё работает",
+  tag: "test",
+  url: "/?tab=settings",
+};
+
+export interface TestResult {
+  reason?: "push-not-configured" | "throttled";
+  devices?: number;
+  sent?: number;
+  errors?: number[];
+  hosts?: string[];
+  thisDevice?: boolean;
+}
+
+/** Понятное объяснение результата проверочного уведомления. */
+export function explainTest(r: TestResult): { ok: boolean; text: string } {
+  if (r.reason === "push-not-configured") {
+    return {
+      ok: false,
+      text: "На сервере не настроены ключи уведомлений. Проверьте переменные VAPID и SUPABASE_SERVICE_ROLE_KEY в Vercel и сделайте Redeploy.",
+    };
+  }
+  if (r.reason === "throttled") return { ok: false, text: "Подождите полминуты и попробуйте ещё раз." };
+  const errors = r.errors ?? [];
+  if (!r.thisDevice) {
+    return {
+      ok: false,
+      text: "Сервер не знает это устройство. Нажмите «Выключить уведомления», затем «Включить уведомления» снова.",
+    };
+  }
+  if (errors.includes(403) || errors.includes(401)) {
+    return {
+      ok: false,
+      text: "Служба уведомлений отклонила ключ. Похоже, NEXT_PUBLIC_VAPID_PUBLIC_KEY и VAPID_PRIVATE_KEY в Vercel не из одной пары.",
+    };
+  }
+  if (errors.includes(404) || errors.includes(410)) {
+    return { ok: false, text: "Подписка этого устройства устарела. Включите уведомления заново." };
+  }
+  if (errors.includes(0)) {
+    return { ok: false, text: `Сервер не смог связаться со службой уведомлений (${(r.hosts ?? []).join(", ")}).` };
+  }
+  if (errors.length > 0 && !r.sent) return { ok: false, text: `Ошибка службы уведомлений: ${errors.join(", ")}.` };
+  return {
+    ok: true,
+    text: `Сервер отправил уведомление (устройств: ${r.sent}). Если оно не появилось в течение минуты — дело в доставке на телефон: проверьте настройки уведомлений для приложения, режим «Фокус» / «Не беспокоить» и VPN.`,
+  };
 }

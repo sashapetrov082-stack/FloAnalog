@@ -39,25 +39,45 @@ export async function claimSend(
   return true;
 }
 
+export interface Delivery {
+  /** Сколько устройств подписано. */
+  devices: number;
+  sent: number;
+  /** Коды ответов push-службы для неудачных отправок (0 — нет ответа). */
+  errors: number[];
+  /** Адреса push-служб (только домен) — для диагностики. */
+  hosts: string[];
+}
+
 /** Отправляет уведомление на все устройства пользователя; устаревшие подписки удаляет. */
-export async function sendToUser(admin: SupabaseClient, userId: string, message: PushMessage): Promise<number> {
+export async function deliver(admin: SupabaseClient, userId: string, message: PushMessage): Promise<Delivery> {
   const { data: subs } = await admin.from("push_subscriptions").select("endpoint, p256dh, auth").eq("user_id", userId);
-  let sent = 0;
+  const result: Delivery = { devices: subs?.length ?? 0, sent: 0, errors: [], hosts: [] };
   await Promise.all(
     (subs ?? []).map(async (s) => {
+      try {
+        result.hosts.push(new URL(s.endpoint).host);
+      } catch {
+        // адрес проверяется при сохранении
+      }
       try {
         await webpush.sendNotification(
           { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
           JSON.stringify(message),
           { TTL: 12 * 60 * 60, urgency: "normal" },
         );
-        sent++;
+        result.sent++;
       } catch (e) {
-        const status = (e as { statusCode?: number }).statusCode;
+        const status = (e as { statusCode?: number }).statusCode ?? 0;
+        result.errors.push(status);
         // Подписка больше не действует (приложение удалили, уведомления выключили).
         if (status === 404 || status === 410) await admin.from("push_subscriptions").delete().eq("endpoint", s.endpoint);
       }
     }),
   );
-  return sent;
+  return result;
+}
+
+export async function sendToUser(admin: SupabaseClient, userId: string, message: PushMessage): Promise<number> {
+  return (await deliver(admin, userId, message)).sent;
 }

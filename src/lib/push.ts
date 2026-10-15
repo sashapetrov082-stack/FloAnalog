@@ -1,7 +1,7 @@
 // Push-уведомления в браузере: подписка этого устройства и сигнал «уведоми партнёра».
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { NotifyEvent } from "@/lib/notify";
+import type { NotifyEvent, TestResult } from "@/lib/notify";
 import { isIos, isStandalone } from "@/lib/pwa";
 
 export type PushState = "unsupported" | "ios-install" | "denied" | "off" | "on";
@@ -71,4 +71,19 @@ export async function notifyPartner(sb: SupabaseClient, event: NotifyEvent): Pro
   } catch {
     // Уведомление не критично: событие уже сохранено.
   }
+}
+
+/** Проверочное уведомление на свои устройства. */
+export async function testPush(sb: SupabaseClient): Promise<TestResult> {
+  const { data } = await sb.auth.getSession();
+  const token = data.session?.access_token;
+  const registration = await navigator.serviceWorker.getRegistration();
+  const subscription = await registration?.pushManager.getSubscription();
+  const response = await fetch("/api/notify/test", {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${token ?? ""}` },
+    body: JSON.stringify({ endpoint: subscription?.endpoint ?? null }),
+  });
+  if (!response.ok) throw new Error(String(response.status));
+  return response.json();
 }

@@ -3,6 +3,7 @@ import {
   buildMessage,
   contraceptionReminder,
   contraceptionReminderKey,
+  explainTest,
   CYCLE_REMINDER,
   isAllowed,
   localClock,
@@ -51,5 +52,15 @@ describe("уведомления", () => {
     for (const kind of ["first", "repeat"] as const) {
       expect(contraceptionReminder(kind).body).not.toMatch(/таблет|контрацеп|кольц|пластыр|цикл/i);
     }
+  });
+
+  it("проверка уведомлений: понятная причина", () => {
+    expect(explainTest({ reason: "push-not-configured" }).text).toMatch(/Vercel/);
+    expect(explainTest({ devices: 0, sent: 0, errors: [], thisDevice: false }).text).toMatch(/не знает это устройство/);
+    expect(explainTest({ devices: 1, sent: 0, errors: [403], thisDevice: true }).text).toMatch(/не из одной пары/);
+    expect(explainTest({ devices: 1, sent: 0, errors: [0], hosts: ["web.push.apple.com"], thisDevice: true }).text).toMatch(
+      /web\.push\.apple\.com/,
+    );
+    expect(explainTest({ devices: 1, sent: 1, errors: [], thisDevice: true }).ok).toBe(true);
   });
 });

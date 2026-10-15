@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { disablePush, enablePush, getPushState, pushConfigured, type PushState } from "@/lib/push";
+import { explainTest } from "@/lib/notify";
+import { disablePush, enablePush, getPushState, pushConfigured, testPush, type PushState } from "@/lib/push";
 import { getSupabase } from "@/lib/supabase/client";
 import { Button, Card } from "./ui";
 
@@ -11,6 +12,7 @@ export function PushCard({ partnerMode }: { partnerMode: boolean }) {
   const [state, setState] = useState<PushState | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [check, setCheck] = useState<{ ok: boolean; text: string } | null>(null);
 
   useEffect(() => {
     getPushState().then(setState, () => setState("unsupported"));
@@ -67,6 +69,30 @@ export function PushCard({ partnerMode }: { partnerMode: boolean }) {
           >
             {state === "on" ? "Выключить уведомления" : "Включить уведомления"}
           </Button>
+          {state === "on" && (
+            <Button
+              variant="secondary"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                setCheck(null);
+                try {
+                  setCheck(explainTest(await testPush(sb)));
+                } catch {
+                  setCheck({ ok: false, text: "Не получилось связаться с сервером. Проверьте интернет." });
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              Проверить уведомления
+            </Button>
+          )}
+          {check && (
+            <p className={`text-sm ${check.ok ? "text-fertile" : "text-warning"}`} role="status">
+              {check.text}
+            </p>
+          )}
         </>
       )}
       {error && <p className="text-sm text-warning">{error}</p>}
