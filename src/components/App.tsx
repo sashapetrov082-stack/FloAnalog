@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { registerServiceWorker } from "@/lib/pwa";
 import { getSupabase } from "@/lib/supabase/client";
 import { AuthDialog } from "./AuthDialog";
 import { Home, type AccountInfo } from "./Home";
@@ -16,6 +17,10 @@ export function App() {
   const [authOpen, setAuthOpen] = useState(false);
   const [pinSetup, setPinSetup] = useState<"enable" | "change" | "disable" | null>(null);
   const authAvailable = getSupabase() !== null;
+
+  useEffect(() => {
+    registerServiceWorker();
+  }, []);
 
   // Пока не ясно, нужен ли PIN, ничего не показываем — данные не должны мелькнуть до ввода PIN.
   if (lock.state.status === "loading") return <main className="flex-1" aria-busy />;
