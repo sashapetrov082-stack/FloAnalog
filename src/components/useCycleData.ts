@@ -19,6 +19,7 @@ import {
   type GuestData,
 } from "@/lib/guest/store";
 import { cleanAuthParamsFromUrl, getSupabase, linkSignInProblem } from "@/lib/supabase/client";
+import { flowDaysOf } from "@/lib/cycle/periods";
 import { predict } from "@/lib/cycle/predict";
 import { predictionRow, savePredictionSnapshot } from "@/lib/pair";
 import { disablePush } from "@/lib/push";
@@ -244,6 +245,7 @@ export function useCycleData() {
       today: accountToday,
       defaultCycleLength: accountData.settings.cycleLength,
       defaultPeriodLength: accountData.settings.periodLength,
+      flowDays: flowDaysOf(accountData.dayLogs),
     });
     // В беременность прогноза цикла нет: партнёру и напоминанию «Скоро новый цикл» он не нужен.
     const row = p && accountData.settings.mode !== "pregnancy" ? predictionRow(p, accountToday) : null;

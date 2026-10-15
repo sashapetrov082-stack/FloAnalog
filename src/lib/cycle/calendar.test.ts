@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { dayMarks, monthGrid } from "./calendar";
-import { markPeriodEnd, markPeriodStart, ongoingPeriod, removePeriod } from "./periods";
+import {
+  askIfStillGoing,
+  findPeriodAt,
+  flowDaysOf,
+  markPeriodEnd,
+  markPeriodStart,
+  ongoingPeriod,
+  periodEnd,
+  removePeriod,
+} from "./periods";
 import { predict, type Period } from "./predict";
 
 describe("monthGrid", () => {
@@ -44,11 +53,32 @@ describe("отметки месячных", () => {
   it("удаление и «идут сейчас»", () => {
     const open: Period[] = [...base, { start: "2026-09-29", end: null }];
     expect(removePeriod(open, "2026-09-29")).toEqual(base);
-    expect(ongoingPeriod(open, "2026-10-02", 5)?.start).toBe("2026-09-29");
-    expect(ongoingPeriod(open, "2026-10-10", 5)).toBeUndefined();
-    expect(ongoingPeriod(base, "2026-09-10", 5)).toBeUndefined();
+    expect(ongoingPeriod(open, "2026-10-02")?.start).toBe("2026-09-29");
+    expect(ongoingPeriod(open, "2026-10-10")?.start).toBe("2026-09-29"); // не закрыты — до 14 дней
+    expect(ongoingPeriod(open, "2026-10-13")).toBeUndefined();
+    expect(ongoingPeriod(base, "2026-09-10")).toBeUndefined();
     // Конец уже отмечен — месячные не считаются идущими, даже если конец сегодня.
-    expect(ongoingPeriod(base, "2026-09-05", 5)).toBeUndefined();
+    expect(ongoingPeriod(base, "2026-09-05")).toBeUndefined();
+  });
+
+  it("незакрытые месячные: «ещё идут?» после ожидаемой длины, выделения продлевают", () => {
+    // Баг из теста: начало 3 октября, обычно 8 дней, конец не отмечен, а месячные всё ещё идут.
+    const open: Period[] = [{ start: "2026-10-03", end: null }];
+    expect(periodEnd(open[0], 8)).toBe("2026-10-10");
+    expect(askIfStillGoing(open, "2026-10-10", 8)).toBeUndefined();
+    expect(askIfStillGoing(open, "2026-10-11", 8)?.start).toBe("2026-10-03");
+    // Ответ «да, ещё идут» = выделения в журнале сегодня.
+    const flow = flowDaysOf({ "2026-10-12": { flow: "medium" }, "2026-10-01": { flow: "light" } });
+    expect(periodEnd(open[0], 8, flow)).toBe("2026-10-12");
+    expect(askIfStillGoing(open, "2026-10-12", 8, flow)).toBeUndefined();
+    expect(findPeriodAt(open, "2026-10-12", 8, flow)?.start).toBe("2026-10-03");
+    // Прогноз: сегодня ещё месячные, а не фертильные дни.
+    const p = predict({ periods: open, today: "2026-10-12", defaultPeriodLength: 8, flowDays: flow })!;
+    expect(p.phase).toBe("menstruation");
+    expect(predict({ periods: open, today: "2026-10-12", defaultPeriodLength: 8 })!.phase).not.toBe("menstruation");
+    expect(dayMarks(open, p, "2026-10-12", null, flow).get("2026-10-12")).toBe("period");
+    // Через 14 дней без отметки конца — не спрашиваем.
+    expect(askIfStillGoing(open, "2026-10-17", 8, flow)).toBeUndefined();
   });
 });
 

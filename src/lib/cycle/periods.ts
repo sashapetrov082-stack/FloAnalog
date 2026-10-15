@@ -13,15 +13,31 @@ function sortPeriods(periods: Period[]): Period[] {
   return [...periods].sort((a, b) => compareDates(a.start, b.start));
 }
 
-/** Последний день месячных: отмеченный конец или ожидаемый по средней длине. */
-export function periodEnd(period: Period, periodLength: number): IsoDate {
-  return period.end ?? addDays(period.start, periodLength - 1);
+/**
+ * Последний день месячных: отмеченный конец или, если конец не отмечен, ожидаемый по средней длине —
+ * но не раньше последнего дня, когда в журнале отмечены выделения (в пределах 14 дней от начала).
+ */
+export function periodEnd(period: Period, periodLength: number, flowDays?: ReadonlySet<IsoDate>): IsoDate {
+  if (period.end) return period.end;
+  let end = addDays(period.start, periodLength - 1);
+  if (flowDays) {
+    for (let i = 0; i < MAX_PERIOD_DAYS; i++) {
+      const d = addDays(period.start, i);
+      if (flowDays.has(d) && compareDates(d, end) > 0) end = d;
+    }
+  }
+  return end;
 }
 
 /** Месячные, в которые попадает дата (с учётом ожидаемой длины, если конец не отмечен). */
-export function findPeriodAt(periods: Period[], date: IsoDate, periodLength: number): Period | undefined {
+export function findPeriodAt(
+  periods: Period[],
+  date: IsoDate,
+  periodLength: number,
+  flowDays?: ReadonlySet<IsoDate>,
+): Period | undefined {
   return periods.find(
-    (p) => compareDates(p.start, date) <= 0 && compareDates(date, periodEnd(p, periodLength)) <= 0,
+    (p) => compareDates(p.start, date) <= 0 && compareDates(date, periodEnd(p, periodLength, flowDays)) <= 0,
   );
 }
 
@@ -60,12 +76,30 @@ export function removePeriod(periods: Period[], start: IsoDate): Period[] {
   return periods.filter((p) => p.start !== start);
 }
 
-/** Идут ли месячные сейчас: начались недавно, а конец ещё не отмечен. */
-export function ongoingPeriod(periods: Period[], today: IsoDate, periodLength: number): Period | undefined {
+/**
+ * Незакрытые месячные: начались не больше 14 дней назад, а конец ещё не отмечен.
+ * Пока ожидаемая длина не прошла — просто идут; потом стоит спросить, идут ли ещё (см. `askIfStillGoing`).
+ */
+export function ongoingPeriod(periods: Period[], today: IsoDate): Period | undefined {
   const last = sortPeriods(periods)
     .filter((p) => compareDates(p.start, today) <= 0)
     .at(-1);
   if (!last || last.end) return undefined;
-  // Конец не отмечен: считаем, что идут, пока не прошла ожидаемая длина + 2 дня запаса.
-  return diffDays(last.start, today) < periodLength + 2 ? last : undefined;
+  return diffDays(last.start, today) < MAX_PERIOD_DAYS ? last : undefined;
+}
+
+/** Конец не отмечен, а ожидаемая длина (с учётом отмеченных выделений) уже прошла — спросить «ещё идут?». */
+export function askIfStillGoing(
+  periods: Period[],
+  today: IsoDate,
+  periodLength: number,
+  flowDays?: ReadonlySet<IsoDate>,
+): Period | undefined {
+  const open = ongoingPeriod(periods, today);
+  return open && compareDates(today, periodEnd(open, periodLength, flowDays)) > 0 ? open : undefined;
+}
+
+/** Дни, когда в журнале отмечены выделения. */
+export function flowDaysOf(dayLogs: Record<IsoDate, { flow?: unknown }>): Set<IsoDate> {
+  return new Set(Object.entries(dayLogs).filter(([, l]) => !!l.flow).map(([d]) => d));
 }

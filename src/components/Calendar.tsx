@@ -27,6 +27,7 @@ export function Calendar({
   periods,
   prediction,
   withdrawal = null,
+  flowDays,
   hideForecast = false,
   takenDates = null,
   today,
@@ -38,6 +39,8 @@ export function Calendar({
   prediction: Prediction | null;
   /** Гормональная контрацепция: прогноз — кровотечение отмены, без фертильных дней. */
   withdrawal?: IsoDate[] | null;
+  /** Дни с отмеченными выделениями: продлевают незакрытые месячные. */
+  flowDays?: ReadonlySet<IsoDate>;
   /** Беременность: прогноза нет, только отмеченные дни. */
   hideForecast?: boolean;
   /** Дни, когда отмечен приём контрацепции. */
@@ -49,8 +52,8 @@ export function Calendar({
 }) {
   const [view, setView] = useState(() => ({ year: Number(today.slice(0, 4)), month: Number(today.slice(5, 7)) }));
   const marks = useMemo(
-    () => dayMarks(periods, prediction, today, withdrawal),
-    [periods, prediction, today, withdrawal],
+    () => dayMarks(periods, prediction, today, withdrawal, flowDays),
+    [periods, prediction, today, withdrawal, flowDays],
   );
   const weeks = monthGrid(view.year, view.month);
 

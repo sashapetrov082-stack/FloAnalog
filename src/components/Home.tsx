@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { isHormonalCycleControl, withdrawalDays } from "@/lib/cycle/contraception";
 import { addDays, compareDates, diffDays, type IsoDate } from "@/lib/cycle/dates";
 import { dueDate, lmpFromDueDate } from "@/lib/cycle/pregnancy";
@@ -9,12 +9,15 @@ import {
   markPeriodEnd,
   markPeriodStart,
   ongoingPeriod,
+  periodEnd,
   removePeriod,
+  askIfStillGoing,
+  flowDaysOf,
 } from "@/lib/cycle/periods";
 import { predict, type Phase, type Prediction, type Warning } from "@/lib/cycle/predict";
 import type { GuestData } from "@/lib/guest/store";
 import { formatDayMonth, formatLong, formatRange, pluralDays } from "@/lib/format";
-import { setDayLog, summarizeLog, type DayLog } from "@/lib/journal";
+import { emptyLog, FLOW_LEVELS, setDayLog, summarizeLog, type DayLog, type FlowLevel } from "@/lib/journal";
 import { exportContraception } from "@/lib/contraception";
 import { getMyLinks } from "@/lib/pair";
 import { getSupabase } from "@/lib/supabase/client";
@@ -50,14 +53,57 @@ export interface AccountInfo {
   onRetry: () => void;
 }
 
-const TABS: { id: Tab; label: string; icon: string }[] = [
-  { id: "today", label: "Сегодня", icon: "●" },
-  { id: "calendar", label: "Календарь", icon: "▦" },
-  { id: "habits", label: "Привычки", icon: "✓" },
-  { id: "pair", label: "Пара", icon: "♡" },
-  { id: "drawings", label: "Рисунки", icon: "✎" },
-  { id: "settings", label: "Настройки", icon: "⚙" },
+const TABS: { id: Tab; label: string }[] = [
+  { id: "today", label: "Сегодня" },
+  { id: "calendar", label: "Календарь" },
+  { id: "habits", label: "Привычки" },
+  { id: "pair", label: "Пара" },
+  { id: "drawings", label: "Рисунки" },
+  { id: "settings", label: "Настройки" },
 ];
+
+/** Иконки вкладок: линии 24×24, цвет — от текста кнопки. */
+function TabIcon({ tab, active }: { tab: Tab; active: boolean }) {
+  const shapes: Record<Tab, ReactNode> = {
+    today: <path d="M12 3c3.6 4.5 6 7.8 6 10.6a6 6 0 0 1-12 0C6 10.8 8.4 7.5 12 3z" />,
+    calendar: (
+      <>
+        <rect x="3.5" y="5" width="17" height="15.5" rx="3" />
+        <path d="M3.5 10h17M8 3v4M16 3v4" />
+      </>
+    ),
+    habits: (
+      <>
+        <rect x="3.5" y="3.5" width="17" height="17" rx="5" />
+        <path d="M8 12.3l2.8 2.8L16.3 9.5" />
+      </>
+    ),
+    pair: <path d="M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.3a4.2 4.2 0 0 1 7.5 2.5C19.5 15.4 12 20 12 20z" />,
+    drawings: <path d="M4.5 19.5l4.3-1 10-10a2.2 2.2 0 0 0-3.1-3.1l-10 10-1.2 4.1zM14 7l3 3" />,
+    settings: (
+      <>
+        <path d="M4 7h9M18 7h2M4 17h3M12 17h8" />
+        <circle cx="15.5" cy="7" r="2.5" />
+        <circle cx="9.5" cy="17" r="2.5" />
+      </>
+    ),
+  };
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="h-[26px] w-[26px]"
+      fill={active ? "currentColor" : "none"}
+      fillOpacity={0.15}
+      stroke="currentColor"
+      strokeWidth={active ? 2.2 : 1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      {shapes[tab]}
+    </svg>
+  );
+}
 
 const phaseLabel: Record<Phase, string> = {
   menstruation: "Месячные",
@@ -159,6 +205,8 @@ export function Home({
   const [editing, setEditing] = useState<IsoDate | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
+  // Отмеченные выделения продлевают месячные, у которых ещё не отмечен конец.
+  const flowDays = useMemo(() => flowDaysOf(dayLogs), [dayLogs]);
   const prediction = useMemo(
     () =>
       predict({
@@ -166,12 +214,14 @@ export function Home({
         today,
         defaultCycleLength: settings.cycleLength,
         defaultPeriodLength: settings.periodLength,
+        flowDays,
       }),
-    [periods, today, settings],
+    [periods, today, settings, flowDays],
   );
   const periodLength = prediction?.periodLength ?? settings.periodLength;
-  const ongoing = ongoingPeriod(periods, today, periodLength);
-  const todayPeriod = findPeriodAt(periods, today, periodLength);
+  const ongoing = ongoingPeriod(periods, today);
+  const stillGoing = askIfStillGoing(periods, today, periodLength, flowDays);
+  const todayPeriod = findPeriodAt(periods, today, periodLength, flowDays);
   const loggedDates = useMemo(() => new Set(Object.keys(dayLogs)), [dayLogs]);
 
   const setPeriods = (next: GuestData["periods"]) => onChange({ ...data, periods: next });
@@ -196,7 +246,7 @@ export function Home({
 
   return (
     <>
-      <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-4 px-4 pb-28 pt-6">
+      <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-4 px-4 pb-32 pt-6">
         {shownTab === "today" && (
           <>
             {account?.sync === "offline" && (
@@ -211,7 +261,17 @@ export function Home({
 
             {pregnant && <PregnancyToday lmp={settings.pregnancyLmp ?? null} today={today} />}
 
-            {!hormonal && !pregnant && <CycleCard prediction={prediction} today={today} />}
+            {!pregnant && stillGoing && (
+              <StillGoingCard
+                start={stillGoing.start}
+                expectedEnd={periodEnd(stillGoing, periodLength, flowDays)}
+                today={today}
+                onYes={(flow) => saveLog(today, { ...(dayLogs[today] ?? emptyLog()), flow })}
+                onNo={(end) => markEnd(end)}
+              />
+            )}
+
+            {!hormonal && !pregnant && <CycleCard prediction={prediction} today={today} uncertain={!!stillGoing} />}
 
             {conception && !pregnant && prediction && (
               <ConceptionCard
@@ -231,7 +291,7 @@ export function Home({
               </p>
             ))}
 
-            {pregnant ? null : ongoing ? (
+            {pregnant || stillGoing ? null : ongoing ? (
               <Button onClick={() => markEnd(today)}>Месячные закончились сегодня</Button>
             ) : todayPeriod?.end ? (
               <p className="rounded-2xl bg-period-soft p-4 text-sm">
@@ -261,6 +321,7 @@ export function Home({
               <Calendar
                 periods={periods}
                 prediction={prediction}
+                flowDays={flowDays}
                 withdrawal={pregnant ? [] : withdrawal}
                 hideForecast={pregnant}
                 takenDates={contraception.config?.method === "none" ? null : contraception.taken}
@@ -279,6 +340,7 @@ export function Home({
                 today={today}
                 periods={periods}
                 periodLength={periodLength}
+                flowDays={flowDays}
                 log={dayLogs[selected]}
                 notice={notice}
                 onStart={() => markStart(selected)}
@@ -328,13 +390,11 @@ export function Home({
                 type="button"
                 aria-current={shownTab === t.id ? "page" : undefined}
                 onClick={() => setTab(t.id)}
-                className={`flex w-full flex-col items-center gap-0.5 py-3 text-[11px] leading-tight ${
+                className={`flex min-h-16 w-full flex-col items-center justify-center gap-1 pb-2 pt-2.5 text-[11px] leading-none tracking-tight min-[380px]:text-xs ${
                   shownTab === t.id ? "font-semibold text-accent" : "text-muted"
                 }`}
               >
-                <span aria-hidden className="text-lg leading-none">
-                  {t.icon}
-                </span>
+                <TabIcon tab={t.id} active={shownTab === t.id} />
                 {t.label}
               </button>
             </li>
@@ -356,7 +416,16 @@ export function Home({
   );
 }
 
-function CycleCard({ prediction, today }: { prediction: Prediction | null; today: IsoDate }) {
+function CycleCard({
+  prediction,
+  today,
+  uncertain = false,
+}: {
+  prediction: Prediction | null;
+  today: IsoDate;
+  /** Не ясно, закончились ли месячные, — фазу пока не называем. */
+  uncertain?: boolean;
+}) {
   if (!prediction) {
     return (
       <Card>
@@ -373,7 +442,7 @@ function CycleCard({ prediction, today }: { prediction: Prediction | null; today
           {prediction.cycleDay}
           <span className="ml-2 text-lg font-normal text-muted">день цикла</span>
         </div>
-        <div className="mt-1 text-base font-medium text-accent">{phaseLabel[prediction.phase]}</div>
+        {!uncertain && <div className="mt-1 text-base font-medium text-accent">{phaseLabel[prediction.phase]}</div>}
       </div>
       <dl className="grid gap-3 text-sm">
         <div>
@@ -420,6 +489,7 @@ function DayPanel({
   today,
   periods,
   periodLength,
+  flowDays,
   log,
   notice,
   onStart,
@@ -432,6 +502,7 @@ function DayPanel({
   today: IsoDate;
   periods: GuestData["periods"];
   periodLength: number;
+  flowDays: ReadonlySet<IsoDate>;
   log: DayLog | undefined;
   notice: string | null;
   onStart: () => void;
@@ -441,7 +512,7 @@ function DayPanel({
   onClose: () => void;
 }) {
   const isFuture = compareDates(date, today) > 0;
-  const period = findPeriodAt(periods, date, periodLength);
+  const period = findPeriodAt(periods, date, periodLength, flowDays);
 
   return (
     <Card className="flex flex-col gap-3">
@@ -848,5 +919,40 @@ function PregnancyDates({
         />
       </label>
     </div>
+  );
+}
+
+/** Конец месячных не отмечен, а обычная длина прошла — спрашиваем, идут ли ещё. */
+function StillGoingCard({
+  start,
+  expectedEnd,
+  today,
+  onYes,
+  onNo,
+}: {
+  start: IsoDate;
+  expectedEnd: IsoDate;
+  today: IsoDate;
+  onYes: (flow: FlowLevel) => void;
+  onNo: (end: IsoDate) => void;
+}) {
+  const day = diffDays(start, today) + 1;
+  return (
+    <Card className="flex flex-col gap-3">
+      <h2 className="text-lg font-semibold">Месячные ещё идут?</h2>
+      <p className="text-sm text-muted">
+        Начались {formatDayMonth(start)}, сегодня {day}-й день. Конец пока не отмечен.
+      </p>
+      <p className="text-sm">Да, ещё идут — какие сегодня:</p>
+      <div className="flex flex-wrap gap-2">
+        {FLOW_LEVELS.map((f) => (
+          <Button key={f.id} variant="secondary" className="px-4" onClick={() => onYes(f.id)}>
+            {f.label}
+          </Button>
+        ))}
+      </div>
+      <Button onClick={() => onNo(expectedEnd)}>Нет, закончились {formatDayMonth(expectedEnd)}</Button>
+      <p className="text-xs text-muted">Закончились в другой день — отметьте его в календаре.</p>
+    </Card>
   );
 }

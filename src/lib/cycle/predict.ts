@@ -2,6 +2,7 @@
 // чтобы её можно было покрыть тестами и переиспользовать в мобильном приложении.
 
 import { addDays, assertIsoDate, compareDates, diffDays, type IsoDate } from "./dates";
+import { periodEnd } from "./periods";
 
 export const DEFAULT_CYCLE_LENGTH = 28;
 export const DEFAULT_PERIOD_LENGTH = 5;
@@ -29,6 +30,8 @@ export interface PredictInput {
   /** Значения из анкеты онбординга, используются пока нет истории. */
   defaultCycleLength?: number;
   defaultPeriodLength?: number;
+  /** Дни с отмеченными выделениями: продлевают незакрытые месячные. */
+  flowDays?: ReadonlySet<IsoDate>;
 }
 
 export type Phase = "menstruation" | "follicular" | "fertile" | "ovulation" | "luteal";
@@ -136,7 +139,7 @@ export function predict(input: PredictInput): Prediction | null {
   const cycleDay = diffDays(last.start, today) + 1;
   const delayDays = Math.max(0, diffDays(nextDate, today));
 
-  const lastEnd = last.end ?? addDays(last.start, periodLength - 1);
+  const lastEnd = periodEnd(last, periodLength, input.flowDays);
   let phase: Phase;
   if (compareDates(today, lastEnd) <= 0) {
     phase = "menstruation";

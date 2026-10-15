@@ -51,11 +51,12 @@ export function dayMarks(
   today: IsoDate,
   /** Гормональная контрацепция: вместо прогноза цикла — ожидаемое кровотечение отмены. */
   withdrawal: IsoDate[] | null = null,
+  flowDays?: ReadonlySet<IsoDate>,
 ): Map<IsoDate, DayMark> {
   const marks = new Map<IsoDate, DayMark>();
   if (withdrawal) {
     for (const d of withdrawal) if (compareDates(d, today) >= 0) marks.set(d, "predicted-period");
-    markPeriods(marks, periods, prediction?.periodLength ?? 5, today);
+    markPeriods(marks, periods, prediction?.periodLength ?? 5, today, flowDays);
     return marks;
   }
   if (!prediction) return marks;
@@ -76,13 +77,19 @@ export function dayMarks(
     });
   }
 
-  markPeriods(marks, periods, periodLength, today);
+  markPeriods(marks, periods, periodLength, today, flowDays);
   return marks;
 }
 
-function markPeriods(marks: Map<IsoDate, DayMark>, periods: Period[], periodLength: number, today: IsoDate): void {
+function markPeriods(
+  marks: Map<IsoDate, DayMark>,
+  periods: Period[],
+  periodLength: number,
+  today: IsoDate,
+  flowDays?: ReadonlySet<IsoDate>,
+): void {
   for (const p of periods) {
-    const end = periodEnd(p, periodLength);
+    const end = periodEnd(p, periodLength, flowDays);
     eachDay(p.start, end, (d) => {
       // Неотмеченный конец в будущем — это ещё прогноз.
       marks.set(d, !p.end && compareDates(d, today) > 0 ? "predicted-period" : "period");
