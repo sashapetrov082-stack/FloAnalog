@@ -14,10 +14,13 @@ export function Onboarding({
   today,
   onDone,
   onSignIn,
+  onPartner,
 }: {
   today: IsoDate;
   onDone: (data: GuestData) => void;
   onSignIn: (() => void) | null;
+  /** «Я партнёр»: вход в аккаунт и сразу вкладка «Пара». */
+  onPartner: (() => void) | null;
 }) {
   const [step, setStep] = useState<Step>("welcome");
   const [lastPeriod, setLastPeriod] = useState<IsoDate | null>(null);
@@ -64,6 +67,11 @@ export function Onboarding({
           {onSignIn && (
             <Button variant="ghost" onClick={onSignIn}>
               У меня уже есть аккаунт — войти
+            </Button>
+          )}
+          {onPartner && (
+            <Button variant="ghost" onClick={onPartner}>
+              Я партнёр — у меня есть код
             </Button>
           )}
           <Disclaimer />

@@ -19,6 +19,8 @@ import {
   type GuestData,
 } from "@/lib/guest/store";
 import { cleanAuthParamsFromUrl, getSupabase, linkSignInProblem } from "@/lib/supabase/client";
+import { predict } from "@/lib/cycle/predict";
+import { predictionRow, savePredictionSnapshot } from "@/lib/pair";
 import { diffData, isEmptyOps, mergeGuestIntoAccount } from "@/lib/sync/diff";
 import { deleteAccount, fetchAccountData, pushOps, recordHealthConsent } from "@/lib/sync/remote";
 
@@ -28,7 +30,7 @@ export type CycleState =
   | { status: "loading" }
   | { status: "error"; message: string }
   | { status: "guest"; data: GuestData | null; today: IsoDate }
-  | { status: "account"; data: GuestData | null; today: IsoDate; email: string; sync: SyncStatus };
+  | { status: "account"; data: GuestData | null; today: IsoDate; userId: string; email: string; sync: SyncStatus };
 
 /** Копия данных аккаунта на устройстве и последнее состояние, подтверждённое сервером. */
 interface AccountCache {
@@ -94,6 +96,7 @@ export function useCycleData() {
         status: "account",
         data: cached?.data ?? (s.status === "guest" ? s.data : null),
         today: todayLocal(),
+        userId: user.id,
         email: user.email ?? "",
         sync: "syncing",
       }));
@@ -222,6 +225,34 @@ export function useCycleData() {
     cacheRef.current = null;
     setState({ status: "guest", data: null, today: todayLocal() });
   }, []);
+
+  // Опорные даты прогноза для партнёра: отправляем, когда прогноз изменился.
+  // Партнёр увидит их, только если владелица разрешила (это проверяет база).
+  const lastSnapshot = useRef<string | null>(null);
+  const accountData = state.status === "account" ? state.data : null;
+  const accountToday = state.status === "account" ? state.today : null;
+  useEffect(() => {
+    const sb = getSupabase();
+    const user = userRef.current;
+    if (!sb || !user || !accountData || !accountToday) return;
+    const p = predict({
+      periods: accountData.periods,
+      today: accountToday,
+      defaultCycleLength: accountData.settings.cycleLength,
+      defaultPeriodLength: accountData.settings.periodLength,
+    });
+    const row = p ? predictionRow(p, accountToday) : null;
+    // Дата расчёта сама по себе не повод отправлять: партнёр считает «сегодня» сам.
+    const key = JSON.stringify(row && { ...row, computed_for: null, cycle_day: null, phase: null });
+    if (key === lastSnapshot.current) return;
+    const timer = setTimeout(() => {
+      savePredictionSnapshot(sb, user.id, row).then(
+        () => (lastSnapshot.current = key),
+        () => undefined, // не получилось — повторим при следующем изменении
+      );
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [accountData, accountToday]);
 
   return {
     state,

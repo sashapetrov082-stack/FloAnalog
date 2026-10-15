@@ -56,6 +56,7 @@ export function App() {
   const account: AccountInfo | null =
     state.status === "account"
       ? {
+          userId: state.userId,
           email: state.email,
           sync: state.sync,
           onSignOut: signOut,
@@ -94,7 +95,18 @@ export function App() {
           pin={{ enabled: lock.state.enabled, onSetup: setPinSetup }}
         />
       ) : (
-        <Onboarding today={state.today} onDone={save} onSignIn={openAuth} />
+        <Onboarding
+          today={state.today}
+          onDone={save}
+          onSignIn={openAuth}
+          onPartner={
+            openAuth &&
+            (() => {
+              sessionStorage.setItem("start-tab", "pair");
+              openAuth();
+            })
+          }
+        />
       )}
       {pinSetup && (
         <PinSetupDialog

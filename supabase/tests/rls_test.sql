@@ -29,8 +29,9 @@ insert into public.periods (start_date, end_date) values ('2026-09-20', '2026-09
 insert into public.day_logs (date, symptoms, moods, note, temperature) values ('2026-10-01', '{headache}', '{calm}', 'секрет', 36.6);
 insert into public.daily_status (date, energy, needs) values ('2026-10-01', 2, '{care}');
 insert into public.predictions (computed_for, cycle_day, phase, next_period_date, next_period_earliest,
-  next_period_latest, ovulation_date, fertile_start, fertile_end)
-values ('2026-10-04', 15, 'ovulation', '2026-10-18', '2026-10-17', '2026-10-19', '2026-10-04', '2026-09-29', '2026-10-05');
+  next_period_latest, ovulation_date, fertile_start, fertile_end, last_period_start, cycle_length, period_length)
+values ('2026-10-04', 15, 'ovulation', '2026-10-18', '2026-10-17', '2026-10-19', '2026-10-04', '2026-09-29', '2026-10-05',
+  '2026-09-20', 28, 5);
 
 do $$ begin
   -- 1. Подросток не может создать код.
@@ -81,7 +82,22 @@ end $$;
 select pg_temp.logout(); select pg_temp.login('00000000-0000-0000-0000-00000000000a');
 select public.approve_partner_link((select v from ctx where k='link')::uuid);
 
+-- 21. Список связей: каждый видит роль и имя второго участника, посторонний — ничего.
+do $$ declare r record; begin
+  select * into r from public.get_my_links();
+  if r.role <> 'owner' or r.other_name <> 'Иван' or r.status <> 'active' then
+    raise exception 'FAIL 21: владелица видит %', r; end if;
+end $$;
+select pg_temp.logout(); select pg_temp.login('00000000-0000-0000-0000-00000000000c');
+do $$ begin
+  if exists (select 1 from public.get_my_links()) then raise exception 'FAIL 21: посторонний видит связи'; end if;
+end $$;
+
 select pg_temp.logout(); select pg_temp.login('00000000-0000-0000-0000-00000000000b');
+do $$ declare r record; begin
+  select * into r from public.get_my_links();
+  if r.role <> 'partner' or r.other_name <> 'Аня' then raise exception 'FAIL 21: партнёр видит %', r; end if;
+end $$;
 do $$ declare v jsonb; n int; begin
   -- 8. Партнёр не читает таблицы владелицы напрямую.
   select count(*) into n from public.day_logs;     if n <> 0 then raise exception 'FAIL 8: day_logs'; end if;
@@ -90,10 +106,13 @@ do $$ declare v jsonb; n int; begin
   select count(*) into n from public.predictions;  if n <> 0 then raise exception 'FAIL 8: predictions'; end if;
   select count(*) into n from public.profiles where id <> auth.uid(); if n <> 0 then raise exception 'FAIL 8: profiles'; end if;
 
-  -- 9. По умолчанию — только прогноз; фаза овуляции скрыта без доступа к фертильности.
+  -- 9. По умолчанию — только прогноз (опорные даты), без овуляции и фертильного окна.
   v := public.get_partner_view('2026-09-01', '2026-10-31');
   if v->'prediction' is null then raise exception 'FAIL 9: нет прогноза'; end if;
-  if v->'prediction'->>'phase' <> 'follicular' then raise exception 'FAIL 9: раскрыта фаза %', v->'prediction'->>'phase'; end if;
+  if v->'prediction'->>'last_period_start' <> '2026-09-20' or v->'prediction'->>'period_length' <> '5' then
+    raise exception 'FAIL 9: нет опорных дат %', v->'prediction'; end if;
+  if v::text like '%ovulation%' or v::text like '%fertile%' or v::text like '%phase%' then
+    raise exception 'FAIL 9: раскрыта фертильность %', v; end if;
   if v ? 'periods' or v ? 'fertility' or v ? 'day_logs' or v ? 'daily_status' then
     raise exception 'FAIL 9: лишние данные %', v; end if;
 
@@ -151,6 +170,7 @@ select pg_temp.logout(); select pg_temp.login('00000000-0000-0000-0000-000000000
 select public.revoke_partner_link((select v from ctx where k='link')::uuid);
 select pg_temp.logout(); select pg_temp.login('00000000-0000-0000-0000-00000000000b');
 do $$ declare n int; begin
+  if exists (select 1 from public.get_my_links()) then raise exception 'FAIL 21: отключённая связь в списке'; end if;
   if public.get_partner_view() is not null then raise exception 'FAIL 15: данные видны после отключения'; end if;
   select count(*) into n from public.shared_notes; if n <> 0 then raise exception 'FAIL 15: заметки видны'; end if;
 end $$;

@@ -15,10 +15,11 @@ import { formatDayMonth, formatLong, formatRange, pluralDays } from "@/lib/forma
 import { setDayLog, summarizeLog, type DayLog } from "@/lib/journal";
 import { Calendar } from "./Calendar";
 import { DayLogEditor } from "./DayLogEditor";
+import { PairTab } from "./PairTab";
 import type { SyncStatus } from "./useCycleData";
 import { Button, Card, Disclaimer, Stepper } from "./ui";
 
-type Tab = "today" | "calendar" | "settings";
+type Tab = "today" | "calendar" | "pair" | "settings";
 
 export interface PinControl {
   enabled: boolean;
@@ -26,6 +27,7 @@ export interface PinControl {
 }
 
 export interface AccountInfo {
+  userId: string;
   email: string;
   sync: SyncStatus;
   onSignOut: () => Promise<void>;
@@ -36,6 +38,7 @@ export interface AccountInfo {
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: "today", label: "Сегодня", icon: "●" },
   { id: "calendar", label: "Календарь", icon: "▦" },
+  { id: "pair", label: "Пара", icon: "♡" },
   { id: "settings", label: "Настройки", icon: "⚙" },
 ];
 
@@ -84,7 +87,12 @@ export function Home({
   pin: PinControl;
 }) {
   const { periods, settings, dayLogs } = data;
-  const [tab, setTab] = useState<Tab>("today");
+  const [tab, setTab] = useState<Tab>(() => {
+    // Партнёр, вошедший через «Я партнёр — у меня есть код», сразу попадает во вкладку «Пара».
+    const start = typeof window !== "undefined" ? sessionStorage.getItem("start-tab") : null;
+    if (start === "pair") sessionStorage.removeItem("start-tab");
+    return start === "pair" ? "pair" : "today";
+  });
   const [selected, setSelected] = useState<IsoDate | null>(null);
   const [editing, setEditing] = useState<IsoDate | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -192,6 +200,8 @@ export function Home({
             )}
           </>
         )}
+
+        {tab === "pair" && <PairTab userId={account?.userId ?? null} today={today} onSignIn={onSignIn} />}
 
         {tab === "settings" && (
           <SettingsTab
