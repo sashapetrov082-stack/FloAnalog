@@ -17,6 +17,7 @@ import { getMyLinks } from "@/lib/pair";
 import { getSupabase } from "@/lib/supabase/client";
 import { Calendar } from "./Calendar";
 import { DayLogEditor } from "./DayLogEditor";
+import { ImportDialog } from "./ImportDialog";
 import { DrawingsTab } from "./Drawings";
 import { PairTab } from "./PairTab";
 import { PushCard } from "./PushCard";
@@ -567,6 +568,8 @@ function SettingsTab({
   partnerMode: boolean;
 }) {
   const [confirming, setConfirming] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [imported, setImported] = useState<number | null>(null);
   const set = (patch: Partial<GuestData["settings"]>) => onChange({ ...data, settings: { ...data.settings, ...patch } });
 
   return (
@@ -629,6 +632,30 @@ function SettingsTab({
 
       <Card className="flex flex-col gap-3">
         <h2 className="text-lg font-semibold">Ваши данные</h2>
+        {!partnerMode && (
+          <>
+            <Button variant="secondary" onClick={() => setImporting(true)}>
+              Перенести историю из Flo или Clue
+            </Button>
+            {imported !== null && (
+              <p className="text-sm text-fertile" role="status">
+                Добавлено месячных: {imported}. Прогноз пересчитан.
+              </p>
+            )}
+            {importing && (
+              <ImportDialog
+                periods={data.periods}
+                today={today}
+                onClose={() => setImporting(false)}
+                onImport={(periods, added) => {
+                  onChange({ ...data, periods });
+                  setImported(added);
+                  setImporting(false);
+                }}
+              />
+            )}
+          </>
+        )}
         {!account && (
           <p className="text-sm text-muted">
             Сейчас данные хранятся только в этом браузере. Если очистить данные сайта или сменить устройство, они
