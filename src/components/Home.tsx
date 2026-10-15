@@ -632,30 +632,6 @@ function SettingsTab({
 
       <Card className="flex flex-col gap-3">
         <h2 className="text-lg font-semibold">Ваши данные</h2>
-        {!partnerMode && (
-          <>
-            <Button variant="secondary" onClick={() => setImporting(true)}>
-              Перенести историю из Flo или Clue
-            </Button>
-            {imported !== null && (
-              <p className="text-sm text-fertile" role="status">
-                Добавлено месячных: {imported}. Прогноз пересчитан.
-              </p>
-            )}
-            {importing && (
-              <ImportDialog
-                periods={data.periods}
-                today={today}
-                onClose={() => setImporting(false)}
-                onImport={(periods, added) => {
-                  onChange({ ...data, periods });
-                  setImported(added);
-                  setImporting(false);
-                }}
-              />
-            )}
-          </>
-        )}
         {!account && (
           <p className="text-sm text-muted">
             Сейчас данные хранятся только в этом браузере. Если очистить данные сайта или сменить устройство, они
@@ -683,6 +659,36 @@ function SettingsTab({
           </Button>
         )}
       </Card>
+
+      {/* Нужно немногим — поэтому в самом низу и неброско. */}
+      {!partnerMode && (
+        <div className="flex flex-col items-start gap-1">
+          <button
+            type="button"
+            className="text-sm text-muted underline underline-offset-2 hover:text-foreground"
+            onClick={() => setImporting(true)}
+          >
+            Перенести историю из другого приложения
+          </button>
+          {imported !== null && (
+            <p className="text-sm text-fertile" role="status">
+              Добавлено месячных: {imported}. Прогноз пересчитан.
+            </p>
+          )}
+          {importing && (
+            <ImportDialog
+              periods={data.periods}
+              today={today}
+              onClose={() => setImporting(false)}
+              onImport={(periods, added) => {
+                onChange({ ...data, periods });
+                setImported(added);
+                setImporting(false);
+              }}
+            />
+          )}
+        </div>
+      )}
 
       <Disclaimer />
     </>
